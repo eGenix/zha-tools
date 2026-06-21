@@ -32,12 +32,12 @@ test: install
 	uv run python -m pytest
 
 validate:
-	uv run python scripts/validate.py
+	uv run --script scripts/validate.py
 
 run: validate
 
 logo:
-	uv run --with resvg-py python tools/make_logo.py
+	uv run --script tools/make_logo.py
 
 build: validate
 	rm -rf $(BUILD_DIR)

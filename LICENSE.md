@@ -1,4 +1,4 @@
-Copyright 2026 eGenix.com Software, Skills and Services GmbH
+Copyright 2026 eGenix.com Software, Skills and Services GmbH, Langenfeld, Germany
 
                                  Apache License
                            Version 2.0, January 2004

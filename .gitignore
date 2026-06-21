@@ -30,7 +30,8 @@ htmlcov/
 .idea/
 .vscode/
 
-# Agents
+# Agents and private data
 agent/
+private/
 CLAUDE.md
 .claude*

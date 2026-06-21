@@ -1,3 +1,7 @@
+# /// script
+# requires-python = ">=3.13"
+# dependencies = ["resvg-py", "fonttools"]
+# ///
 """Logo tooling for the ZHA Tools integration.
 
 Builds the logo SVGs and renders the brand PNGs that ship with the integration:

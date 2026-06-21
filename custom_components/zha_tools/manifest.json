@@ -1,12 +1,14 @@
 {
   "domain": "zha_tools",
   "name": "ZHA Tools",
-  "version": "0.1.0",
+  "after_dependencies": ["zha"],
+  "codeowners": ["@egenix"],
   "config_flow": true,
-  "single_config_entry": true,
+  "documentation": "https://github.com/egenix/zha-tools",
   "integration_type": "service",
   "iot_class": "local_polling",
-  "after_dependencies": ["zha"],
-  "codeowners": ["Marc-Andre Lemburg <mal@egenix.com>"],
-  "requirements": []
+  "issue_tracker": "https://github.com/egenix/zha-tools/issues",
+  "requirements": [],
+  "single_config_entry": true,
+  "version": "0.1.0"
 }

@@ -1,11 +1,14 @@
 [project]
 name = "zha-tools"
 version = "0.1.0"
-description = "Home Assistant custom integration providing a zha_tools.reconfigure action to reconfigure ZHA devices programmatically."
+description = "Home Assistant custom integration offering a collection of helper actions for ZHA devices, starting with a reconfigure helper."
 requires-python = ">=3.13"
 readme = "README.md"
 license = "Apache-2.0"
-authors = [{ name = "eGenix.com Software, Skills and Services GmbH" }]
+authors = [
+    { name = "Marc-André Lemburg", email = "mal@egenix.com" },
+    { name = "eGenix.com Software, Skills and Services GmbH" },
+]
 # Home Assistant provides all runtime dependencies, so the integration itself
 # has none of its own.
 dependencies = []
@@ -18,6 +21,7 @@ dev = [
     "pytest",
     "pytest-asyncio",
     "pytest-homeassistant-custom-component",
+    "pytest-timeout",
 ]
 
 [tool.uv]
@@ -33,3 +37,5 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-p no:cacheprovider"
+# Safety net so a hung test fails instead of blocking the suite / CI.
+timeout = 10

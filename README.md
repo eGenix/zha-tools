@@ -4,27 +4,35 @@
   <img src="icons/logo.svg" alt="ZHA Tools logo" width="180" height="180">
 </p>
 
-ZHA Tools is a [Home Assistant](https://www.home-assistant.io/) custom integration that lets your automations programmatically run a ZHA (Zigbee Home Automation) device *reconfigure* — the same operation as the "Reconfigure device" button in the ZHA UI — with automatic retries. This makes it possible to reconfigure flaky Zigbee devices on a schedule, or in response to an event, without anyone having to click the button manually.
+<p align="center">
+  <a href="https://github.com/egenix/zha-tools/actions/workflows/ci.yml"><img src="https://github.com/egenix/zha-tools/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://hacs.xyz"><img src="https://img.shields.io/badge/HACS-Custom-41BDF5.svg" alt="HACS Custom"></a>
+</p>
 
-## Features
+ZHA Tools is a [Home Assistant](https://www.home-assistant.io/) custom integration that provides a growing collection of small **helper actions** for working with [ZHA](https://www.home-assistant.io/integrations/zha/) (Zigbee Home Automation) devices from your automations and scripts.
 
-- Registers a single action/service, `zha_tools.reconfigure`, that triggers a ZHA device reconfigure from automations and scripts.
-- Automatically retries the reconfigure when it does not complete cleanly.
-- Configurable per-attempt timeout, maximum number of retries, and delay between attempts — set sensible defaults once and override them per call.
-- Returns structured response data (`device_id`, `status`, `attempts`) so automations can react to the outcome.
-- Reports a clear status: `complete`, `incomplete`, `timeout`, or `unavailable`.
-- UI-based setup and configuration via Home Assistant's config and options flows.
+Each helper is a self-contained action in the `zha_tools.` namespace that does one job and reports a clear result. The integration is built to be extended: new helpers can be added alongside the existing ones without changing how they are installed or used.
+
+The first helper is [**reconfigure**](#reconfigure), which programmatically runs a ZHA device *reconfigure* — the same operation as the "Reconfigure device" button in the ZHA UI — with automatic retries. This makes it possible to reconfigure flaky Zigbee devices on a schedule, or in response to an event, without anyone having to click the button manually.
+
+## Helpers
+
+| Helper | Action | What it does |
+| --- | --- | --- |
+| [Reconfigure](#reconfigure) | `zha_tools.reconfigure` | Run a ZHA device reconfigure with automatic retries and report the outcome (`complete`, `incomplete`, `timeout`, or `unavailable`). |
+
+More helpers will be added to this list over time.
 
 ## Requirements
 
 - Home Assistant **2025.8.0** or newer.
-- The ZHA integration must already be set up, with the device(s) you want to reconfigure paired and managed by ZHA.
+- The ZHA integration must already be set up, with the device(s) you want to work with paired and managed by ZHA.
 
 ## Installation
 
 ### HACS (recommended)
 
-1. In HACS, add this repository as a custom repository with the category **Integration**.
+1. In HACS, add `https://github.com/egenix/zha-tools` as a custom repository with the category **Integration**.
 2. Install the **ZHA Tools** integration from HACS.
 3. Restart Home Assistant.
 4. Add the integration via **Settings -> Devices & Services -> Add Integration**, then search for **ZHA Tools**.
@@ -35,21 +43,26 @@ ZHA Tools is a [Home Assistant](https://www.home-assistant.io/) custom integrati
 2. Restart Home Assistant.
 3. Add the integration via **Settings -> Devices & Services -> Add Integration**, then search for **ZHA Tools**.
 
-## Configuration
+The integration is set up entirely from the UI via Home Assistant's config and options flows; each helper's defaults (where it has any) are edited under **Settings -> Devices & Services -> ZHA Tools -> Configure**.
 
-After the integration is added, you can configure the default behaviour of the action via **Settings -> Devices & Services -> ZHA Tools -> Configure**.
+## Reconfigure
 
-The following options are available:
+The `zha_tools.reconfigure` action triggers a ZHA device reconfigure for a single device and reports the outcome back to the caller.
+
+- Runs the reconfigure from automations and scripts, the same operation as the "Reconfigure device" button in the ZHA UI.
+- Automatically retries when the reconfigure does not complete cleanly.
+- Configurable per-attempt timeout, maximum number of retries, and delay between attempts — set sensible defaults once and override them per call.
+- Returns structured response data (`device_id`, `status`, `attempts`) so automations can react to the outcome.
+
+### Defaults
+
+The reconfigure defaults are edited via **Settings -> Devices & Services -> ZHA Tools -> Configure**:
 
 - **timeout** (default `20`) — the per-attempt timeout, in seconds. A single reconfigure attempt that does not finish within this time is reported as a `timeout` and (if retries remain) retried.
 - **max_retries** (default `10`) — the maximum number of retries *after* the first attempt. The total number of attempts is therefore up to `max_retries + 1`. A retry happens whenever the status is anything other than `complete`.
 - **retry_delay** (default `5`) — the number of seconds to wait between attempts.
 
 Each of these defaults can be overridden on a per-call basis by passing the corresponding field to the action.
-
-## Usage
-
-The integration provides one action: `zha_tools.reconfigure`.
 
 ### Fields
 
@@ -124,9 +137,26 @@ sequence:
 
 In **Developer Tools -> Actions**, select `zha_tools.reconfigure`, pick the device, and enable "return response" to see the `device_id`, `status`, and `attempts` returned by the call.
 
-## How it works
+### How it works
 
 When the action is called, it triggers a ZHA device reconfigure for the selected device and watches ZHA's progress events for the device — in particular the binding and configure-reporting steps. Based on those events it decides the outcome: `complete` when at least one binding and at least one reporting step succeeded, `incomplete` when the run finished without that minimum success, `timeout` when an attempt did not finish in time, and `unavailable` when the device did not respond. If the result is anything other than `complete`, the action waits `retry_delay` seconds and tries again, up to `max_retries` additional attempts, then returns the final status and the number of attempts made.
+
+### Troubleshooting
+
+#### `Script requires 'response_variable' for response data for service call zha_tools.reconfigure`
+
+This is expected, not a bug. The action is a [response-only](https://www.home-assistant.io/docs/scripts/service-calls/#use-templates-to-handle-response-data) action (`SupportsResponse.ONLY`): its sole job is to return the reconfigure result, so Home Assistant refuses to run it unless the caller captures that result. You called it without capturing the response.
+
+Add `response_variable` to the action:
+
+```yaml
+  - action: zha_tools.reconfigure
+    data:
+      device_id: 1234567890abcdef1234567890abcdef
+    response_variable: result        # <-- required
+```
+
+From **Developer Tools -> Actions**, enable the **Return response** toggle for the same reason. See [Response](#response) above for the keys returned in `result`.
 
 ## Development
 
@@ -139,29 +169,14 @@ You need `uv` installed; see the [uv documentation](https://docs.astral.sh/uv/) 
 
 ## Logo and branding
 
-[`icons/logo.svg`](icons/logo.svg) is the editable source of the logo, and
-[`icons/logo-dark.svg`](icons/logo-dark.svg) is the dark-theme variant (a deeper
-gradient with a light edge ring). The PNGs they are rendered to — `icon.png`
-256×256, `icon@2x.png` 512×512, `logo.png` / `logo@2x.png`, and the matching
-`dark_*` variants — live in
-[`custom_components/zha_tools/brand/`](custom_components/zha_tools/brand/) so they
-ship with the integration. `make validate` checks the icon dimensions.
+[`icons/logo.svg`](icons/logo.svg) is the editable source of the logo, and [`icons/logo-dark.svg`](icons/logo-dark.svg) is the dark-theme variant (a deeper gradient with a light edge ring). The PNGs they are rendered to — `icon.png` 256×256, `icon@2x.png` 512×512, `logo.png` / `logo@2x.png`, and the matching `dark_*` variants — live in [`custom_components/zha_tools/brand/`](custom_components/zha_tools/brand/) so they ship with the integration. `make validate` checks the icon dimensions.
 
-The assets are generated by [`tools/make_logo.py`](tools/make_logo.py); run
-`make logo` to rebuild the dark variant and all brand PNGs from the SVG sources
-(add `--wordmark` to also re-bake the wordmark from a font).
+The assets are generated by [`tools/make_logo.py`](tools/make_logo.py); run `make logo` to rebuild the dark variant and all brand PNGs from the SVG sources (add `--wordmark` to also re-bake the wordmark from a font).
 
-Since **Home Assistant 2026.3.0**, a custom integration serves its own brand
-images directly from this `brand/` subdirectory — Home Assistant prefers them
-over the brands CDN, with no `manifest.json` changes required (see the
-[Brands Proxy API announcement](https://developers.home-assistant.io/blog/2026/02/24/brands-proxy-api)).
-So the logo appears in the UI as soon as the integration is installed; there is
-no need to submit it to the [home-assistant/brands](https://github.com/home-assistant/brands)
-repository. (On Home Assistant older than 2026.3.0 the local images are ignored
-and a brands-repository submission would be required instead.)
+Since **Home Assistant 2026.3.0**, a custom integration serves its own brand images directly from this `brand/` subdirectory — Home Assistant prefers them over the brands CDN, with no `manifest.json` changes required (see the [Brands Proxy API announcement](https://developers.home-assistant.io/blog/2026/02/24/brands-proxy-api)). So the logo appears in the UI as soon as the integration is installed; there is no need to submit it to the [home-assistant/brands](https://github.com/home-assistant/brands) repository. (On Home Assistant older than 2026.3.0 the local images are ignored and a brands-repository submission would be required instead.)
 
 ## License
 
-Copyright 2026 eGenix.com Software, Skills and Services GmbH.
+Copyright 2026 eGenix.com Software, Skills and Services GmbH, Langenfeld, Germany.
 
 Licensed under the Apache License, Version 2.0 (Apache-2.0). See [LICENSE.md](LICENSE.md) for the full license text.

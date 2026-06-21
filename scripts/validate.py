@@ -1,3 +1,7 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["pyyaml"]
+# ///
 """Validate the zha_tools custom integration.
 
 Performs lightweight, dependency-free checks on the integration before it is
