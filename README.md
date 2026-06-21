@@ -167,6 +167,24 @@ This project uses [uv](https://docs.astral.sh/uv/) for dependency management and
 
 You need `uv` installed; see the [uv documentation](https://docs.astral.sh/uv/) for installation instructions.
 
+### Releasing
+
+Releases are published by pushing a `v`-prefixed tag. The release workflow (`.github/workflows/release.yml`) then builds the distribution zip and creates the GitHub release, using the matching `CHANGELOG.md` section as the release notes.
+
+To cut a release:
+
+1. Bump the version, keeping it identical in `custom_components/zha_tools/manifest.json`, `pyproject.toml`, `custom_components/zha_tools/__init__.py` and the `Makefile` (`make validate` checks that the first three agree).
+2. Add a `## [x.y.z] - YYYY-MM-DD` section to `CHANGELOG.md` describing the changes, together with its `[x.y.z]:` link reference at the bottom of the file.
+3. Commit the changes and push them to `main`.
+4. Tag that commit and push the tag, which triggers the release:
+
+```bash
+git tag -a vX.Y.Z -m "ZHA Tools X.Y.Z"
+git push origin vX.Y.Z
+```
+
+The tag must point at a commit that already contains the release workflow, because a tag-triggered workflow runs as the workflow exists at the tagged commit.
+
 ## Logo and branding
 
 [`icons/logo.svg`](icons/logo.svg) is the editable source of the logo, and [`icons/logo-dark.svg`](icons/logo-dark.svg) is the dark-theme variant (a deeper gradient with a light edge ring). The PNGs they are rendered to — `icon.png` 256×256, `icon@2x.png` 512×512, `logo.png` / `logo@2x.png`, and the matching `dark_*` variants — live in [`custom_components/zha_tools/brand/`](custom_components/zha_tools/brand/) so they ship with the integration. `make validate` checks the icon dimensions.

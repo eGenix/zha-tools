@@ -1,0 +1,42 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          enable-cache: true
+
+      - name: Build distribution
+        run: make dist
+
+      - name: Extract release notes from CHANGELOG
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '
+            index($0, "## [" v "]") == 1 {flag=1; next}
+            flag && (index($0, "## [") == 1 || index($0, "[" v "]:") == 1) {exit}
+            flag {print}
+          ' CHANGELOG.md > release-notes.md
+          test -s release-notes.md || { echo "No CHANGELOG section for $version"; exit 1; }
+          echo "----- release notes -----"; cat release-notes.md
+
+      - name: Create GitHub release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            dist/zha_tools-*.zip \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file release-notes.md \
+            --repo "$GITHUB_REPOSITORY"
