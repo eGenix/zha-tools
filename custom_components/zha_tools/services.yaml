@@ -1,0 +1,53 @@
+reconfigure:
+  name: Reconfigure ZHA device
+  description: >-
+    Run a ZHA device reconfigure, retrying on failure, and return the resulting
+    status (complete, incomplete, timeout or unavailable).
+  fields:
+    device_id:
+      name: Device
+      description: The ZHA device to reconfigure.
+      required: true
+      selector:
+        device:
+          filter:
+            - integration: zha
+    timeout:
+      name: Timeout
+      description: >-
+        Per-attempt timeout in seconds. Defaults to the configured value.
+      required: false
+      example: 20
+      selector:
+        number:
+          min: 1
+          max: 300
+          step: 1
+          unit_of_measurement: seconds
+          mode: box
+    max_retries:
+      name: Maximum retries
+      description: >-
+        Maximum number of retries after the first attempt. Defaults to the
+        configured value.
+      required: false
+      example: 10
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 1
+          mode: box
+    retry_delay:
+      name: Retry delay
+      description: >-
+        Seconds to wait between attempts. Defaults to the configured value.
+      required: false
+      example: 5
+      selector:
+        number:
+          min: 0
+          max: 300
+          step: 1
+          unit_of_measurement: seconds
+          mode: box

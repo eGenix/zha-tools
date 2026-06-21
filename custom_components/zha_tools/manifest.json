@@ -1,0 +1,12 @@
+{
+  "domain": "zha_tools",
+  "name": "ZHA Tools",
+  "version": "0.1.0",
+  "config_flow": true,
+  "single_config_entry": true,
+  "integration_type": "service",
+  "iot_class": "local_polling",
+  "after_dependencies": ["zha"],
+  "codeowners": ["Marc-Andre Lemburg <mal@egenix.com>"],
+  "requirements": []
+}

@@ -1,0 +1,51 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "ZHA Tools",
+        "description": "Add ZHA Tools. You can change the default timeout and retry behaviour of the reconfigure action later from the integration options."
+      }
+    },
+    "abort": {
+      "already_configured": "Already configured. Only a single instance is allowed.",
+      "single_instance_allowed": "Already configured. Only a single instance is allowed."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "ZHA Tools defaults",
+        "description": "Default values used by the reconfigure action when not overridden in the call.",
+        "data": {
+          "timeout": "Timeout (seconds)",
+          "max_retries": "Maximum retries",
+          "retry_delay": "Retry delay (seconds)"
+        }
+      }
+    }
+  },
+  "services": {
+    "reconfigure": {
+      "name": "Reconfigure ZHA device",
+      "description": "Run a ZHA device reconfigure, retrying on failure, and return the resulting status.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The ZHA device to reconfigure."
+        },
+        "timeout": {
+          "name": "Timeout",
+          "description": "Per-attempt timeout in seconds. Defaults to the configured value."
+        },
+        "max_retries": {
+          "name": "Maximum retries",
+          "description": "Maximum number of retries after the first attempt. Defaults to the configured value."
+        },
+        "retry_delay": {
+          "name": "Retry delay",
+          "description": "Seconds to wait between attempts. Defaults to the configured value."
+        }
+      }
+    }
+  }
+}
