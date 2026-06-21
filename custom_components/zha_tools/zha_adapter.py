@@ -66,3 +66,31 @@ async def async_trigger_reconfigure(device: object) -> None:
         device: A ZHA device object as returned by ``async_get_zha_device``.
     """
     await device.async_configure()
+
+
+async def async_trigger_reinterview(device: object) -> None:
+    """Re-interview a ZHA device in place (rediscover endpoints and clusters).
+
+    Goes through ZHA's gateway, which re-runs the zigpy device interview behind a
+    shadow device and swaps the refreshed device in on success. The device is
+    *not* removed from the network, so this cannot strand it.
+
+    Args:
+        device: A ZHA device object as returned by ``async_get_zha_device``.
+    """
+    await device.gateway.async_reinterview_device(device.ieee)
+
+
+async def async_trigger_rejoin(device: object) -> None:
+    """Ask a ZHA device to leave the network and immediately rejoin it.
+
+    Sends a ZDO leave request with the rejoin flag set, via the zigpy controller
+    application directly -- ZHA's own ``async_remove_device`` removes a device
+    without setting the rejoin flag, which would make it leave permanently. The
+    call returns once the request has been sent; whether the device actually
+    rejoins is up to its firmware.
+
+    Args:
+        device: A ZHA device object as returned by ``async_get_zha_device``.
+    """
+    await device.gateway.application_controller.remove(device.ieee, rejoin=True)

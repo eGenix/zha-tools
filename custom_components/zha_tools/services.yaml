@@ -51,3 +51,102 @@ reconfigure:
           step: 1
           unit_of_measurement: seconds
           mode: box
+
+reinterview:
+  name: Re-interview ZHA device
+  description: >-
+    Re-interview a ZHA device in place (rediscover its endpoints and clusters)
+    without removing it from the network, retrying on failure, and return the
+    resulting status (complete, timeout or unavailable). Safe: the device never
+    leaves the network, so it cannot be stranded.
+  fields:
+    device_id:
+      name: Device
+      description: The ZHA device to re-interview.
+      required: true
+      selector:
+        device:
+          filter:
+            - integration: zha
+    timeout:
+      name: Timeout
+      description: >-
+        Per-attempt timeout in seconds. Defaults to the configured value.
+      required: false
+      example: 20
+      selector:
+        number:
+          min: 1
+          max: 300
+          step: 1
+          unit_of_measurement: seconds
+          mode: box
+    max_retries:
+      name: Maximum retries
+      description: >-
+        Maximum number of retries after the first attempt. Defaults to the
+        configured value.
+      required: false
+      example: 10
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 1
+          mode: box
+    retry_delay:
+      name: Retry delay
+      description: >-
+        Seconds to wait between attempts. Defaults to the configured value.
+      required: false
+      example: 5
+      selector:
+        number:
+          min: 0
+          max: 300
+          step: 1
+          unit_of_measurement: seconds
+          mode: box
+
+rejoin:
+  name: "DANGER: rejoin ZHA device"
+  description: >-
+    Ask a ZHA device to leave the network and immediately rejoin it (a remote
+    substitute for pressing the pairing button). DANGER: if the device firmware
+    does not honour the rejoin flag it will leave the network and NOT come back,
+    and will then need a manual re-pair. Not retried; only sent to a reachable
+    device. Prefer "Re-interview ZHA device" unless a full rejoin is truly
+    needed.
+  fields:
+    device_id:
+      name: Device
+      description: The ZHA device to ask to leave and rejoin.
+      required: true
+      selector:
+        device:
+          filter:
+            - integration: zha
+    confirm:
+      name: Confirm
+      description: >-
+        Must be set to true to actually run the rejoin. A safety acknowledgement
+        that the device may leave the network and need a manual re-pair; the
+        action refuses to run otherwise.
+      required: true
+      example: true
+      selector:
+        boolean:
+    rejoin_wait:
+      name: Rejoin wait
+      description: >-
+        Seconds to wait for the device to return before reporting. 0 returns
+        immediately after sending the request without checking the outcome.
+      required: false
+      example: 60
+      selector:
+        number:
+          min: 0
+          max: 600
+          step: 1
+          unit_of_measurement: seconds
+          mode: box

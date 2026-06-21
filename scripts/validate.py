@@ -75,12 +75,15 @@ def read_init_version() -> str:
 
 
 def validate_services() -> None:
-    """Confirm services.yaml is valid YAML with a top-level reconfigure key."""
+    """Confirm services.yaml is valid YAML and defines the expected actions."""
+    expected = {"reconfigure", "reinterview", "rejoin"}
     services_path = INTEGRATION_DIR / "services.yaml"
     services = yaml.safe_load(services_path.read_text(encoding="utf-8"))
-    if not isinstance(services, dict) or "reconfigure" not in services:
+    if not isinstance(services, dict) or not expected.issubset(services):
+        missing = expected.difference(services if isinstance(services, dict) else {})
         raise ValueError(
-            f"{services_path} must define a top-level 'reconfigure' service"
+            f"{services_path} must define services {sorted(expected)} "
+            f"(missing: {sorted(missing)})"
         )
 
 

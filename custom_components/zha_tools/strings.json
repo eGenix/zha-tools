@@ -15,7 +15,7 @@
     "step": {
       "init": {
         "title": "ZHA Tools defaults",
-        "description": "Default values used by the reconfigure action when not overridden in the call.",
+        "description": "Default values used by the reconfigure and re-interview actions when not overridden in the call.",
         "data": {
           "timeout": "Timeout (seconds)",
           "max_retries": "Maximum retries",
@@ -44,6 +44,46 @@
         "retry_delay": {
           "name": "Retry delay",
           "description": "Seconds to wait between attempts. Defaults to the configured value."
+        }
+      }
+    },
+    "reinterview": {
+      "name": "Re-interview ZHA device",
+      "description": "Re-interview a ZHA device in place (rediscover its endpoints and clusters) without removing it from the network, retrying on failure. Safe: the device never leaves the network.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The ZHA device to re-interview."
+        },
+        "timeout": {
+          "name": "Timeout",
+          "description": "Per-attempt timeout in seconds. Defaults to the configured value."
+        },
+        "max_retries": {
+          "name": "Maximum retries",
+          "description": "Maximum number of retries after the first attempt. Defaults to the configured value."
+        },
+        "retry_delay": {
+          "name": "Retry delay",
+          "description": "Seconds to wait between attempts. Defaults to the configured value."
+        }
+      }
+    },
+    "rejoin": {
+      "name": "DANGER: rejoin ZHA device",
+      "description": "Ask a ZHA device to leave the network and immediately rejoin it (a remote substitute for the pairing button). DANGER: if the device firmware ignores the rejoin flag it will leave and not return, needing a manual re-pair. Prefer Re-interview unless a full rejoin is truly needed.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The ZHA device to ask to leave and rejoin."
+        },
+        "confirm": {
+          "name": "Confirm",
+          "description": "Must be set to true to actually run the rejoin, acknowledging the device may leave the network and need a manual re-pair. The action refuses to run otherwise."
+        },
+        "rejoin_wait": {
+          "name": "Rejoin wait",
+          "description": "Seconds to wait for the device to return before reporting. 0 returns immediately without checking the outcome."
         }
       }
     }

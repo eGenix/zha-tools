@@ -13,13 +13,17 @@ ZHA Tools is a [Home Assistant](https://www.home-assistant.io/) custom integrati
 
 Each helper is a self-contained action in the `zha_tools.` namespace that does one job and reports a clear result. The integration is built to be extended: new helpers can be added alongside the existing ones without changing how they are installed or used.
 
-The first helper is [**reconfigure**](#reconfigure), which programmatically runs a ZHA device *reconfigure* — the same operation as the "Reconfigure device" button in the ZHA UI — with automatic retries. This makes it possible to reconfigure flaky Zigbee devices on a schedule, or in response to an event, without anyone having to click the button manually.
+The helpers recover flaky Zigbee devices on a schedule, or in response to an event, without anyone having to walk over to the device — which matters because installed devices often have their pairing button buried behind a wall plate, ceiling fitting or enclosure.
 
 ## Helpers
 
-| Helper | Action | What it does |
-| --- | --- | --- |
-| [Reconfigure](#reconfigure) | `zha_tools.reconfigure` | Run a ZHA device reconfigure with automatic retries and report the outcome (`complete`, `incomplete`, `timeout`, or `unavailable`). |
+| Helper | Action | What it does | Risk |
+| --- | --- | --- | --- |
+| [Reconfigure](#reconfigure) | `zha_tools.reconfigure` | Run a ZHA device reconfigure (re-run binding and reporting setup) with automatic retries. | Safe |
+| [Re-interview](#re-interview) | `zha_tools.reinterview` | Re-interview a device in place (rediscover its endpoints and clusters) with automatic retries. The device never leaves the network. | Safe |
+| [Rejoin](#rejoin) | `zha_tools.rejoin` | Ask a device to leave and immediately rejoin — a remote substitute for the pairing button. | ⚠️ Dangerous |
+
+All three actions report a status back to the caller and use `SupportsResponse.ONLY`, so a call **must** capture the response with `response_variable` (see [Troubleshooting](#troubleshooting)).
 
 More helpers will be added to this list over time.
 
@@ -156,7 +160,69 @@ Add `response_variable` to the action:
     response_variable: result        # <-- required
 ```
 
-From **Developer Tools -> Actions**, enable the **Return response** toggle for the same reason. See [Response](#response) above for the keys returned in `result`.
+From **Developer Tools -> Actions**, enable the **Return response** toggle for the same reason. See [Response](#response) above for the keys returned in `result`. The same applies to the `reinterview` and `rejoin` actions below.
+
+## Re-interview
+
+`zha_tools.reinterview` re-interviews a device **in place**: it re-runs ZHA's device interview — rediscovering the node descriptor, endpoints and clusters — behind a shadow device, and swaps the refreshed device in on success. The device is **never removed from the network**, so this is safe; it cannot strand a device whose pairing button you can't reach. Use it when a device was interviewed badly (missing entities, wrong model, half-working) and a [reconfigure](#reconfigure) is not enough. It shares the reconfigure timeout/retry defaults and per-call overrides.
+
+### Fields
+
+| Field | Required | Default | Description |
+| --- | --- | --- | --- |
+| `device_id` | yes | — | The ZHA device to re-interview. |
+| `timeout` | no | configured default (`20`) | Per-attempt timeout, in seconds. |
+| `max_retries` | no | configured default (`10`) | Maximum number of retries after the first attempt. |
+| `retry_delay` | no | configured default (`5`) | Seconds to wait between attempts. |
+
+### Response
+
+The response is a mapping with `device_id`, `status` — one of `complete` (the re-interview finished), `timeout` (an attempt did not finish in time), or `unavailable` (the device did not respond) — and `attempts`. An unexpected error during the re-interview is **not** swallowed: it propagates to the caller rather than being reported as a status.
+
+### Example
+
+```yaml
+- action: zha_tools.reinterview
+  data:
+    device_id: 1234567890abcdef1234567890abcdef
+  response_variable: result
+```
+
+## Rejoin
+
+> [!CAUTION]
+> **This can permanently drop a device from your network.** `zha_tools.rejoin` asks the device to *leave* the Zigbee network and immediately rejoin it — a ZDO leave request with the rejoin flag set, which is a remote substitute for pressing the pairing button. If the device's firmware does **not** honour the rejoin flag, it leaves and **does not come back**, and you will then have to re-pair it manually — exactly the situation you were trying to avoid. Mains-powered Zigbee 3.0 devices usually rejoin reliably; older or battery-powered (sleepy) devices are hit-or-miss. **Try [re-interview](#re-interview) first**, and only reach for rejoin when that is not enough.
+
+For safety, the rejoin **requires an explicit `confirm: true`** (it refuses to run otherwise), is **never retried** (a second leave would only make things worse), and is **only sent to a device that is currently reachable**.
+
+### Fields
+
+| Field | Required | Default | Description |
+| --- | --- | --- | --- |
+| `device_id` | yes | — | The ZHA device to ask to leave and rejoin. |
+| `confirm` | yes | — (no default) | Safety acknowledgement. Must be set to `true` for the action to run; it refuses otherwise, so a mistyped automation cannot trigger a rejoin by accident. |
+| `rejoin_wait` | no | `60` | Seconds to wait for the device to return before reporting. `0` returns immediately after sending the request, without checking the outcome. |
+
+### Response
+
+The response is a mapping with `device_id` and `status` — one of:
+
+- `unavailable` — the device was offline, so no leave was sent;
+- `requested` — the leave-with-rejoin was sent, but the device has not been confirmed back (it may still be rejoining, or it may be gone);
+- `complete` — the device was reachable again within `rejoin_wait`.
+
+Because a rejoin cannot be confirmed reliably, treat `requested` as "asked, outcome unknown": follow up by checking the device, and keep physical access in mind in case a manual re-pair turns out to be necessary.
+
+### Example
+
+```yaml
+- action: zha_tools.rejoin
+  data:
+    device_id: 1234567890abcdef1234567890abcdef
+    confirm: true            # required; the action refuses to run without it
+    rejoin_wait: 60
+  response_variable: result
+```
 
 ## Development
 

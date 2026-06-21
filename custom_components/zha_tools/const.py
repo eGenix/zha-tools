@@ -2,27 +2,33 @@
 
 from __future__ import annotations
 
-# Integration domain and service name.
+# Integration domain and service names.
 DOMAIN = "zha_tools"
 SERVICE_RECONFIGURE = "reconfigure"
+SERVICE_REINTERVIEW = "reinterview"
+SERVICE_REJOIN = "rejoin"
 
 # Service / options keys.
 ATTR_DEVICE_ID = "device_id"
 CONF_TIMEOUT = "timeout"
 CONF_MAX_RETRIES = "max_retries"
 CONF_RETRY_DELAY = "retry_delay"
+CONF_REJOIN_WAIT = "rejoin_wait"
+CONF_CONFIRM = "confirm"
 
 # Default values (all user configurable via the options flow and overridable
 # per service call).
-DEFAULT_TIMEOUT = 20  # seconds to wait for a single reconfigure attempt
+DEFAULT_TIMEOUT = 20  # seconds to wait for a single reconfigure/re-interview attempt
 DEFAULT_MAX_RETRIES = 10  # additional attempts after the first one
 DEFAULT_RETRY_DELAY = 5  # seconds to wait between attempts
+DEFAULT_REJOIN_WAIT = 60  # seconds to wait for a device to return after a rejoin
 
-# Reported reconfigure outcomes.
+# Reported outcomes.
 STATUS_COMPLETE = "complete"  # finished, binding and reporting succeeded
 STATUS_INCOMPLETE = "incomplete"  # finished, but binding/reporting failed
 STATUS_TIMEOUT = "timeout"  # attempt did not finish within the timeout
 STATUS_UNAVAILABLE = "unavailable"  # device did not respond
+STATUS_REQUESTED = "requested"  # rejoin request was sent; the outcome is unconfirmed
 
 # Keys used in the service response and the per-attempt result.
 ATTR_STATUS = "status"

@@ -1,6 +1,6 @@
 [project]
 name = "zha-tools"
-version = "0.1.0"
+version = "0.2.0"
 description = "Home Assistant custom integration offering a collection of helper actions for ZHA devices, starting with a reconfigure helper."
 requires-python = ">=3.13"
 readme = "README.md"
