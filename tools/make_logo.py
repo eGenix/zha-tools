@@ -130,10 +130,6 @@ def build_wordmark() -> str:
       <stop offset="0" stop-color="#ffffff" stop-opacity="0.28"/>
       <stop offset="0.5" stop-color="#ffffff" stop-opacity="0"/>
     </linearGradient>
-    <linearGradient id="mesh" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#22D3EE"/>
-      <stop offset="1" stop-color="#A3E635"/>
-    </linearGradient>
     <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
       <feDropShadow dx="0" dy="5" stdDeviation="7" flood-color="#000000" flood-opacity="0.30"/>
     </filter>
@@ -141,18 +137,6 @@ def build_wordmark() -> str:
 
   <rect x="16" y="16" width="480" height="480" rx="104" fill="url(#bg)"/>
   <rect x="16" y="16" width="480" height="480" rx="104" fill="url(#sheen)"/>
-
-  <g stroke="url(#mesh)" stroke-width="7" fill="none" opacity="0.55" stroke-linejoin="round">
-    <polygon points="256,86 403,171 403,341 256,426 109,341 109,171"/>
-  </g>
-  <g fill="url(#mesh)" opacity="0.7">
-    <circle cx="256" cy="86" r="14"/>
-    <circle cx="403" cy="171" r="14"/>
-    <circle cx="403" cy="341" r="14"/>
-    <circle cx="256" cy="426" r="14"/>
-    <circle cx="109" cy="341" r="14"/>
-    <circle cx="109" cy="171" r="14"/>
-  </g>
 
   <g filter="url(#shadow)" fill="#ffffff">
     {zha}

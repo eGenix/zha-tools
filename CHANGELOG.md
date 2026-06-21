@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-06-21
+
+### Changed
+
+- Simplified the logo to the "ZHA TOOLS" wordmark only, removing the decorative hexagon graphic.
+
 ## [0.2.0] - 2026-06-21
 
 ### Added
@@ -23,5 +29,6 @@ Initial release of ZHA Tools, a Home Assistant custom integration that provides 
 - Debug logging of each attempt and of the binding / configure-reporting results reported back by ZHA.
 - A bundled brand logo with light and dark variants, served directly by the integration on Home Assistant 2026.3.0 and newer.
 
+[0.3.0]: https://github.com/egenix/zha-tools/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/egenix/zha-tools/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/egenix/zha-tools/releases/tag/v0.1.0
