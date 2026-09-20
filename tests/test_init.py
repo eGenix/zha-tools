@@ -6,8 +6,11 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from homeassistant.exceptions import ServiceValidationError
+
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components import zha_tools
 from custom_components.zha_tools.const import (
     CONF_MAX_RETRIES,
     CONF_RETRY_DELAY,
@@ -177,3 +180,95 @@ async def test_service_requires_device_id(hass):
             blocking=True,
             return_response=True,
         )
+
+
+@pytest.mark.parametrize(
+    ("service", "action"),
+    [
+        (SERVICE_RECONFIGURE, "async_reconfigure_device"),
+        (SERVICE_REINTERVIEW, "async_reinterview_device"),
+    ],
+)
+async def test_all_devices_runs_a_batch(hass, service, action):
+    """``all_devices: true`` hands the action to the batch runner."""
+    await _setup(hass)
+    expected = {"devices": [], "total": 0, "complete": 0, "failed": 0}
+    with patch(
+        "custom_components.zha_tools.async_run_on_all_devices",
+        AsyncMock(return_value=expected),
+    ) as mock:
+        result = await hass.services.async_call(
+            DOMAIN,
+            service,
+            {"all_devices": True},
+            blocking=True,
+            return_response=True,
+        )
+    assert result == expected
+    args = mock.await_args.args
+    assert args[1] is getattr(zha_tools, action)
+    assert args[2] == service
+    assert mock.await_args.kwargs == {
+        "timeout": 10.0,
+        "max_retries": 10,
+        "retry_delay": 5.0,
+    }
+
+
+async def test_all_devices_and_device_id_are_exclusive(hass):
+    """Naming both a device and all devices is a validation error."""
+    await _setup(hass)
+    with patch(
+        "custom_components.zha_tools.async_run_on_all_devices",
+        AsyncMock(return_value={}),
+    ) as batch_mock:
+        with patch(
+            "custom_components.zha_tools.async_reconfigure_device",
+            AsyncMock(return_value={}),
+        ) as single_mock:
+            with pytest.raises(Exception):
+                await hass.services.async_call(
+                    DOMAIN,
+                    SERVICE_RECONFIGURE,
+                    {"device_id": "dev1", "all_devices": True},
+                    blocking=True,
+                    return_response=True,
+                )
+    batch_mock.assert_not_awaited()
+    single_mock.assert_not_awaited()
+
+
+async def test_all_devices_false_without_device_id_raises(hass):
+    """``all_devices: false`` alone leaves nothing to work on."""
+    await _setup(hass)
+    with patch(
+        "custom_components.zha_tools.async_reconfigure_device",
+        AsyncMock(return_value={}),
+    ) as mock:
+        with pytest.raises(ServiceValidationError):
+            await hass.services.async_call(
+                DOMAIN,
+                SERVICE_RECONFIGURE,
+                {"all_devices": False},
+                blocking=True,
+                return_response=True,
+            )
+    mock.assert_not_awaited()
+
+
+async def test_rejoin_does_not_accept_all_devices(hass):
+    """The dangerous rejoin action is single-device only."""
+    await _setup(hass)
+    with patch(
+        "custom_components.zha_tools.async_rejoin_device",
+        AsyncMock(return_value={}),
+    ) as mock:
+        with pytest.raises(Exception):
+            await hass.services.async_call(
+                DOMAIN,
+                SERVICE_REJOIN,
+                {"all_devices": True, "confirm": True},
+                blocking=True,
+                return_response=True,
+            )
+    mock.assert_not_awaited()

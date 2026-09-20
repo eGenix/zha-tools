@@ -52,6 +52,58 @@ def async_get_zha_device(hass: HomeAssistant, device_id: str) -> object:
     return proxy.device
 
 
+def selected_device_ids(device_proxies: list) -> list[str]:
+    """Return the Home Assistant device ids of the given ZHA device proxies.
+
+    The coordinator is left out: it is the radio itself, not a device that can
+    be reconfigured or re-interviewed. The ids are returned sorted by device
+    name so a batch run always works through the devices in the same,
+    predictable order.
+
+    Args:
+        device_proxies: ZHA device proxies, each exposing a ``device_id`` and
+            the underlying ZHA ``device``.
+
+    Returns:
+        The device registry ids of all non-coordinator devices.
+    """
+    proxies = [proxy for proxy in device_proxies if not proxy.device.is_coordinator]
+    proxies.sort(key=lambda proxy: (str(proxy.device.name), str(proxy.device.ieee)))
+    return [proxy.device_id for proxy in proxies]
+
+
+def async_get_zha_device_ids(hass: HomeAssistant) -> list[str]:
+    """Return the device ids of all ZHA devices except the coordinator.
+
+    Args:
+        hass: The Home Assistant instance.
+
+    Returns:
+        The device registry ids of every device managed by ZHA, minus the
+        coordinator, sorted by device name.
+
+    Raises:
+        ServiceValidationError: If the ZHA integration is not set up.
+    """
+    # Imported lazily, for the same reason as in ``async_get_zha_device``.
+    from homeassistant.components.zha.helpers import get_zha_gateway_proxy
+
+    try:
+        gateway_proxy = get_zha_gateway_proxy(hass)
+    except ValueError as err:
+        raise ServiceValidationError(
+            "The ZHA integration is not set up, so its devices cannot be listed"
+        ) from err
+
+    device_ids = selected_device_ids(list(gateway_proxy.device_proxies.values()))
+    _LOGGER.debug(
+        "Found %d ZHA device(s) excluding the coordinator: %s",
+        len(device_ids),
+        ", ".join(device_ids),
+    )
+    return device_ids
+
+
 async def async_trigger_reconfigure(device: object) -> None:
     """Trigger a reconfigure on a ZHA device.
 

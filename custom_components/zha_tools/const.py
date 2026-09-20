@@ -10,6 +10,7 @@ SERVICE_REJOIN = "rejoin"
 
 # Service / options keys.
 ATTR_DEVICE_ID = "device_id"
+CONF_ALL_DEVICES = "all_devices"
 CONF_TIMEOUT = "timeout"
 CONF_MAX_RETRIES = "max_retries"
 CONF_RETRY_DELAY = "retry_delay"
@@ -29,10 +30,15 @@ STATUS_INCOMPLETE = "incomplete"  # finished, but binding/reporting failed
 STATUS_TIMEOUT = "timeout"  # attempt did not finish within the timeout
 STATUS_UNAVAILABLE = "unavailable"  # device did not respond
 STATUS_REQUESTED = "requested"  # rejoin request was sent; the outcome is unconfirmed
+STATUS_ERROR = "error"  # the action raised an error for this device (batch runs only)
 
 # Keys used in the service response and the per-attempt result.
 ATTR_STATUS = "status"
 ATTR_ATTEMPTS = "attempts"
+
+# Key under which ``hass.data[DOMAIN]`` records the batched action currently
+# running, so that a second batched run can be refused.
+DATA_BATCH_RUNNING = "batch_running"
 
 # The following mirror constants from the bundled ``zha`` integration. They are
 # duplicated here on purpose so importing this module does not pull in the heavy

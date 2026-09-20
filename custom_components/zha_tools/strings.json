@@ -27,11 +27,15 @@
   "services": {
     "reconfigure": {
       "name": "Reconfigure ZHA device",
-      "description": "Run a ZHA device reconfigure, retrying on failure, and return the resulting status.",
+      "description": "Run a ZHA device reconfigure, retrying on failure, and return the resulting status. Works on a single device, or on all ZHA devices except the coordinator.",
       "fields": {
         "device_id": {
           "name": "Device",
-          "description": "The ZHA device to reconfigure."
+          "description": "The ZHA device to reconfigure. Required unless All devices is turned on."
+        },
+        "all_devices": {
+          "name": "All devices",
+          "description": "Reconfigure every ZHA device except the coordinator, one after another, continuing with the next device whatever the previous one reported. Cannot be combined with a device, and only one batched run can be in progress at a time."
         },
         "timeout": {
           "name": "Timeout",
@@ -49,11 +53,15 @@
     },
     "reinterview": {
       "name": "Re-interview ZHA device",
-      "description": "Re-interview a ZHA device in place (rediscover its endpoints and clusters) without removing it from the network, retrying on failure. Safe: the device never leaves the network.",
+      "description": "Re-interview a ZHA device in place (rediscover its endpoints and clusters) without removing it from the network, retrying on failure. Safe: the device never leaves the network. Works on a single device, or on all ZHA devices except the coordinator.",
       "fields": {
         "device_id": {
           "name": "Device",
-          "description": "The ZHA device to re-interview."
+          "description": "The ZHA device to re-interview. Required unless All devices is turned on."
+        },
+        "all_devices": {
+          "name": "All devices",
+          "description": "Re-interview every ZHA device except the coordinator, one after another, continuing with the next device whatever the previous one reported. Cannot be combined with a device, and only one batched run can be in progress at a time."
         },
         "timeout": {
           "name": "Timeout",

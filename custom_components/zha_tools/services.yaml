@@ -2,16 +2,30 @@ reconfigure:
   name: Reconfigure ZHA device
   description: >-
     Run a ZHA device reconfigure, retrying on failure, and return the resulting
-    status (complete, incomplete, timeout or unavailable).
+    status (complete, incomplete, timeout or unavailable). Works on a single
+    device, or on all ZHA devices except the coordinator.
   fields:
     device_id:
       name: Device
-      description: The ZHA device to reconfigure.
-      required: true
+      description: >-
+        The ZHA device to reconfigure. Required unless "All devices" is turned
+        on.
+      required: false
       selector:
         device:
           filter:
             - integration: zha
+    all_devices:
+      name: All devices
+      description: >-
+        Reconfigure every ZHA device except the coordinator, one after another,
+        continuing with the next device whatever the previous one reported.
+        Cannot be combined with a device. Only one batched run (reconfigure or
+        re-interview) can be in progress at a time.
+      required: false
+      example: true
+      selector:
+        boolean:
     timeout:
       name: Timeout
       description: >-
@@ -58,16 +72,30 @@ reinterview:
     Re-interview a ZHA device in place (rediscover its endpoints and clusters)
     without removing it from the network, retrying on failure, and return the
     resulting status (complete, timeout or unavailable). Safe: the device never
-    leaves the network, so it cannot be stranded.
+    leaves the network, so it cannot be stranded. Works on a single device, or
+    on all ZHA devices except the coordinator.
   fields:
     device_id:
       name: Device
-      description: The ZHA device to re-interview.
-      required: true
+      description: >-
+        The ZHA device to re-interview. Required unless "All devices" is turned
+        on.
+      required: false
       selector:
         device:
           filter:
             - integration: zha
+    all_devices:
+      name: All devices
+      description: >-
+        Re-interview every ZHA device except the coordinator, one after
+        another, continuing with the next device whatever the previous one
+        reported. Cannot be combined with a device. Only one batched run
+        (reconfigure or re-interview) can be in progress at a time.
+      required: false
+      example: true
+      selector:
+        boolean:
     timeout:
       name: Timeout
       description: >-

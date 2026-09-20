@@ -25,6 +25,8 @@ The helpers recover flaky Zigbee devices on a schedule, or in response to an eve
 
 All three actions report a status back to the caller and use `SupportsResponse.ONLY`, so a call **must** capture the response with `response_variable` (see [Troubleshooting](#troubleshooting)).
 
+Reconfigure and re-interview also run on [all devices](#running-on-all-devices) at once, instead of on a single one.
+
 More helpers will be added to this list over time.
 
 ## Requirements
@@ -51,7 +53,7 @@ The integration is set up entirely from the UI via Home Assistant's config and o
 
 ## Reconfigure
 
-The `zha_tools.reconfigure` action triggers a ZHA device reconfigure for a single device and reports the outcome back to the caller.
+The `zha_tools.reconfigure` action triggers a ZHA device reconfigure for a single device — or for [all devices](#running-on-all-devices) — and reports the outcome back to the caller.
 
 - Runs the reconfigure from automations and scripts, the same operation as the "Reconfigure device" button in the ZHA UI.
 - Automatically retries when the reconfigure does not complete cleanly.
@@ -72,7 +74,8 @@ Each of these defaults can be overridden on a per-call basis by passing the corr
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `device_id` | yes | — | The ZHA device to reconfigure. The UI presents a device selector filtered to the `zha` integration. |
+| `device_id` | yes, unless `all_devices` is used | — | The ZHA device to reconfigure. The UI presents a device selector filtered to the `zha` integration. |
+| `all_devices` | no | `false` | Reconfigure every ZHA device except the coordinator, one after another. Cannot be combined with `device_id`. See [Running on all devices](#running-on-all-devices). |
 | `timeout` | no | configured default (`20`) | Per-attempt timeout, in seconds. |
 | `max_retries` | no | configured default (`10`) | Maximum number of retries after the first attempt (total attempts up to `max_retries + 1`). |
 | `retry_delay` | no | configured default (`5`) | Seconds to wait between attempts. |
@@ -170,7 +173,8 @@ From **Developer Tools -> Actions**, enable the **Return response** toggle for t
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `device_id` | yes | — | The ZHA device to re-interview. |
+| `device_id` | yes, unless `all_devices` is used | — | The ZHA device to re-interview. |
+| `all_devices` | no | `false` | Re-interview every ZHA device except the coordinator, one after another. Cannot be combined with `device_id`. See [Running on all devices](#running-on-all-devices). |
 | `timeout` | no | configured default (`20`) | Per-attempt timeout, in seconds. |
 | `max_retries` | no | configured default (`10`) | Maximum number of retries after the first attempt. |
 | `retry_delay` | no | configured default (`5`) | Seconds to wait between attempts. |
@@ -188,12 +192,68 @@ The response is a mapping with `device_id`, `status` — one of `complete` (the 
   response_variable: result
 ```
 
+## Running on all devices
+
+[Reconfigure](#reconfigure) and [re-interview](#re-interview) can work through your whole Zigbee network in one call. Pass `all_devices: true` instead of a `device_id`:
+
+```yaml
+- action: zha_tools.reconfigure
+  data:
+    all_devices: true
+  response_variable: result
+```
+
+What happens:
+
+- Every device ZHA manages is processed, **except the coordinator** — that is the radio itself, not a device that can be reconfigured or re-interviewed.
+- Devices are handled **one at a time**, in a predictable order (sorted by device name). The next device is only started once the previous one has finished — including all of its retries.
+- The run **always continues** with the next device, whatever the previous one reported: a `timeout`, an `unavailable` device or even an unexpected error does not stop it.
+- The timeout and retry fields apply *per device*, exactly as they do for a single-device call.
+- `device_id` and `all_devices` are mutually exclusive; passing both is a validation error.
+
+> [!NOTE]
+> A batch run can take a long time: the worst case is roughly `number of devices x (max_retries + 1) x (timeout + retry_delay)`. With the defaults and a handful of unreachable devices, that is easily tens of minutes. Consider lowering `max_retries` for scheduled all-device runs.
+
+### Only one at a time
+
+While a batched reconfigure or re-interview is running, **no second batched run may start** — neither of the same action nor of the other one. Two batches talking to the same Zigbee network in parallel would only make the radio traffic (and the results) worse. A second batched call fails immediately with an error saying which run is still in progress; single-device calls are not affected.
+
+### Response
+
+The response for an all-devices run is a mapping with:
+
+- `devices` (list) — one entry per device, in the order they were processed. Each entry is the same mapping a single-device call returns (`device_id`, `status`, `attempts`), except when the action raised an unexpected error for that device: then the entry has `status: error` and an `error` key with the error message (the full traceback is written to the log).
+- `total` (integer) — the number of devices processed.
+- `complete` (integer) — how many of them ended with status `complete`.
+- `failed` (integer) — how many did not, that is `total - complete`.
+
+For example, to notify only when something did not work out:
+
+```yaml
+- action: zha_tools.reinterview
+  data:
+    all_devices: true
+    max_retries: 2
+  response_variable: result
+- if:
+    - condition: template
+      value_template: "{{ result.failed > 0 }}"
+  then:
+    - action: notify.mobile_app_phone
+      data:
+        title: ZHA Tools
+        message: >-
+          {{ result.failed }} of {{ result.total }} devices did not complete:
+          {{ result.devices | rejectattr('status', 'eq', 'complete')
+             | map(attribute='device_id') | join(', ') }}
+```
+
 ## Rejoin
 
 > [!CAUTION]
 > **This can permanently drop a device from your network.** `zha_tools.rejoin` asks the device to *leave* the Zigbee network and immediately rejoin it — a ZDO leave request with the rejoin flag set, which is a remote substitute for pressing the pairing button. If the device's firmware does **not** honour the rejoin flag, it leaves and **does not come back**, and you will then have to re-pair it manually — exactly the situation you were trying to avoid. Mains-powered Zigbee 3.0 devices usually rejoin reliably; older or battery-powered (sleepy) devices are hit-or-miss. **Try [re-interview](#re-interview) first**, and only reach for rejoin when that is not enough.
 
-For safety, the rejoin **requires an explicit `confirm: true`** (it refuses to run otherwise), is **never retried** (a second leave would only make things worse), and is **only sent to a device that is currently reachable**.
+For safety, the rejoin **requires an explicit `confirm: true`** (it refuses to run otherwise), is **never retried** (a second leave would only make things worse), and is **only sent to a device that is currently reachable**. It is deliberately **single-device only**: there is no `all_devices` option, because a batched rejoin could drop your entire network at once.
 
 ### Fields
 

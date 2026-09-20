@@ -5,7 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.3.0] - 2026-06-21
+## [0.3.0] - 2026-09-20
+
+### Added
+
+- `all_devices: true` option for `zha_tools.reconfigure` and `zha_tools.reinterview`: instead of a single `device_id`, the action works through every ZHA device except the coordinator, one at a time. The next device is started once the previous one has finished, whatever its outcome, and the response reports the per-device results together with `total`, `complete` and `failed` counts. Only one batched run can be in progress at a time; a second one is refused. The dangerous `rejoin` action deliberately has no such option.
 
 ### Changed
 
