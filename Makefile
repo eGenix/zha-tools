@@ -1,7 +1,7 @@
 # Makefile for the zha-tools Home Assistant custom integration.
 # All tooling is driven through uv.
 
-VERSION       := 0.3.0
+VERSION       := 0.4.0
 INTEGRATION   := zha_tools
 SRC_DIR       := custom_components/$(INTEGRATION)
 BUILD_DIR     := build

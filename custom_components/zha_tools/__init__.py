@@ -56,7 +56,7 @@ from .rejoin import async_rejoin_device
 
 _LOGGER = logging.getLogger(__name__)
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 # The reconfigure, re-interview and ping actions share the same retry parameters;
 # per-call overrides are optional and fall back to the config entry options.
