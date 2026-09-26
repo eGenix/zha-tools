@@ -1,7 +1,7 @@
 """Run a ZHA Tools action across all configured ZHA devices.
 
-The reconfigure and re-interview actions can be pointed at every device ZHA
-manages instead of at a single one. This module holds the shared machinery for
+The reconfigure, re-interview and ping actions can be pointed at every device
+ZHA manages instead of at a single one. This module holds the shared machinery for
 that: it looks up the devices (all of them except the coordinator), works
 through them one at a time -- the next device is only started once the previous
 one has finished, successfully or not -- and returns a per-device result list
@@ -30,7 +30,8 @@ from .zha_adapter import async_get_zha_device_ids
 _LOGGER = logging.getLogger(__name__)
 
 # A single-device action: ``(hass, device_id, **params) -> result mapping``.
-# ``async_reconfigure_device`` and ``async_reinterview_device`` both match.
+# ``async_reconfigure_device``, ``async_reinterview_device`` and
+# ``async_ping_device`` all match.
 DeviceAction = Callable[..., Awaitable[dict]]
 
 

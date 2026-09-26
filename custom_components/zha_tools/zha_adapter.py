@@ -12,11 +12,27 @@ from __future__ import annotations
 import logging
 
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ServiceValidationError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
+
+# A ping reads the ZCL version attribute of the Basic cluster. Both are
+# mandatory in the Zigbee Cluster Library, so every Zigbee device supports them.
+_BASIC_CLUSTER_ID = 0x0000
+_ZCL_VERSION_ATTR_ID = 0x0000
+
+# Endpoint 0 is the Zigbee Device Object (ZDO), which carries no ZCL clusters.
+_ZDO_ENDPOINT_ID = 0
+
+
+class DeviceUnreachableError(Exception):
+    """The radio could not deliver a request to the device.
+
+    Raised in place of zigpy's ``DeliveryError``, so callers can tell an
+    unreachable device apart from other failures without importing zigpy.
+    """
 
 
 def async_get_zha_device(hass: HomeAssistant, device_id: str) -> object:
@@ -146,3 +162,84 @@ async def async_trigger_rejoin(device: object) -> None:
         device: A ZHA device object as returned by ``async_get_zha_device``.
     """
     await device.gateway.application_controller.remove(device.ieee, rejoin=True)
+
+
+def _find_basic_cluster(zigpy_device: object) -> object | None:
+    """Return the first Basic cluster of a zigpy device, or ``None``.
+
+    Args:
+        zigpy_device: The zigpy device to search.
+
+    Returns:
+        The Basic server cluster of the lowest numbered endpoint carrying one.
+    """
+    for endpoint_id, endpoint in sorted(zigpy_device.endpoints.items()):
+        if endpoint_id == _ZDO_ENDPOINT_ID:
+            continue
+        cluster = endpoint.in_clusters.get(_BASIC_CLUSTER_ID)
+        if cluster is not None:
+            return cluster
+    return None
+
+
+async def async_trigger_ping(device: object, timeout: float) -> None:
+    """Ping a ZHA device by reading an attribute from it, bypassing all caches.
+
+    Reads the ZCL version attribute of the Basic cluster directly through
+    zigpy, rather than through ZHA's cluster handler, which retries on its own
+    and swallows the final failure. The request is sent whether or not ZHA
+    currently considers the device available. A reply updates the device's
+    ``last_seen``, from which ZHA's own availability checker marks the device
+    available again.
+
+    Args:
+        device: A ZHA device object as returned by ``async_get_zha_device``.
+        timeout: Seconds to wait for the reply. zigpy uses its own, longer
+            reply timeout for end devices.
+
+    Raises:
+        TimeoutError: If the device did not reply in time.
+        DeviceUnreachableError: If the radio could not deliver the request.
+        HomeAssistantError: If the device has no Basic cluster to read from.
+    """
+    # Imported lazily, for the same reason as in ``async_get_zha_device``.
+    from zigpy.exceptions import DeliveryError
+
+    cluster = _find_basic_cluster(device.device)
+    if cluster is None:
+        raise HomeAssistantError(
+            f"ZHA device {device.name} has no Basic cluster, so it cannot be pinged"
+        )
+    try:
+        await cluster.read_attributes(
+            [_ZCL_VERSION_ATTR_ID], allow_cache=False, timeout=timeout
+        )
+    except DeliveryError as err:
+        raise DeviceUnreachableError(str(err)) from err
+
+
+async def async_trigger_address_refresh(device: object) -> None:
+    """Ask the network for the current network (NWK) address of a ZHA device.
+
+    Broadcasts a ZDO ``NWK_addr_req`` for the device's IEEE address. When the
+    device (or its parent) answers, zigpy updates the stored NWK address, so a
+    device which rejoined under a new address without the coordinator noticing
+    can be reached again. The call returns once the request has been sent; the
+    answer is processed by zigpy in the background.
+
+    Args:
+        device: A ZHA device object as returned by ``async_get_zha_device``.
+    """
+    # Imported lazily, for the same reason as in ``async_get_zha_device``.
+    import zigpy.zdo
+    from zigpy.zdo.types import AddrRequestType, ZDOCmd
+
+    await zigpy.zdo.broadcast(
+        device.gateway.application_controller,
+        ZDOCmd.NWK_addr_req,
+        None,  # no group id
+        0,  # radius: use the network's maximum
+        device.ieee,
+        AddrRequestType.Single,
+        0,  # start index
+    )

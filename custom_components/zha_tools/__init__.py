@@ -5,10 +5,12 @@ Provides a small collection of ZHA helper actions that automations can call:
 * ``zha_tools.reconfigure`` -- run a ZHA device reconfigure, with retries;
 * ``zha_tools.reinterview`` -- re-interview a device in place, with retries;
 * ``zha_tools.rejoin`` -- ask a device to leave and immediately rejoin
-  (a remote substitute for the pairing button -- see the danger notes).
+  (a remote substitute for the pairing button -- see the danger notes);
+* ``zha_tools.ping`` -- check that a device answers, with retries, which also
+  brings back devices ZHA has given up on.
 
-Each action returns the resulting status to the caller. Reconfigure and
-re-interview can either work on a single ``device_id`` or, with
+Each action returns the resulting status to the caller. Reconfigure,
+re-interview and ping can either work on a single ``device_id`` or, with
 ``all_devices: true``, on every ZHA device except the coordinator.
 """
 
@@ -42,10 +44,12 @@ from .const import (
     DEFAULT_RETRY_DELAY,
     DEFAULT_TIMEOUT,
     DOMAIN,
+    SERVICE_PING,
     SERVICE_RECONFIGURE,
     SERVICE_REINTERVIEW,
     SERVICE_REJOIN,
 )
+from .ping import async_ping_device
 from .reconfigure import async_reconfigure_device
 from .reinterview import async_reinterview_device
 from .rejoin import async_rejoin_device
@@ -54,7 +58,7 @@ _LOGGER = logging.getLogger(__name__)
 
 __version__ = "0.3.0"
 
-# The reconfigure and re-interview actions share the same retry parameters;
+# The reconfigure, re-interview and ping actions share the same retry parameters;
 # per-call overrides are optional and fall back to the config entry options.
 # The target is either a single ``device_id`` or ``all_devices: true`` -- the
 # two are mutually exclusive, and one of them has to be given.
@@ -109,8 +113,8 @@ async def _async_handle_retry_action(
 ) -> ServiceResponse:
     """Run a retried single-device action for a service call.
 
-    Reconfigure and re-interview only differ in the action they run, so they
-    share this handler body: it resolves the retry parameters and then either
+    Reconfigure, re-interview and ping only differ in the action they run, so
+    they share this handler body: it resolves the retry parameters and then either
     runs the action on the single requested device or, for
     ``all_devices: true``, on every ZHA device except the coordinator.
 
@@ -171,11 +175,11 @@ async def _async_handle_retry_action(
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up ZHA Tools from a config entry.
 
-    Registers the ``reconfigure``, ``reinterview`` and ``rejoin`` actions. The
-    single config entry's options supply the default timeout and retry behaviour
-    shared by reconfigure and re-interview; each can be overridden per call.
-    Those two also accept ``all_devices: true`` instead of a ``device_id``, to
-    work through every ZHA device except the coordinator.
+    Registers the ``reconfigure``, ``reinterview``, ``rejoin`` and ``ping``
+    actions. The single config entry's options supply the default timeout and
+    retry behaviour shared by reconfigure, re-interview and ping; each can be
+    overridden per call. Those three also accept ``all_devices: true`` instead
+    of a ``device_id``, to work through every ZHA device except the coordinator.
 
     Args:
         hass: The Home Assistant instance.
@@ -195,6 +199,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         """Handle a re-interview call and return the resulting status."""
         return await _async_handle_retry_action(
             hass, entry, call, SERVICE_REINTERVIEW, async_reinterview_device
+        )
+
+    async def handle_ping(call: ServiceCall) -> ServiceResponse:
+        """Handle a ping call and return the resulting status."""
+        return await _async_handle_retry_action(
+            hass, entry, call, SERVICE_PING, async_ping_device
         )
 
     async def handle_rejoin(call: ServiceCall) -> ServiceResponse:
@@ -238,17 +248,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     hass.services.async_register(
         DOMAIN,
+        SERVICE_PING,
+        handle_ping,
+        schema=_RETRY_SCHEMA,
+        supports_response=SupportsResponse.ONLY,
+    )
+    hass.services.async_register(
+        DOMAIN,
         SERVICE_REJOIN,
         handle_rejoin,
         schema=REJOIN_SCHEMA,
         supports_response=SupportsResponse.ONLY,
     )
     _LOGGER.debug(
-        "Registered %s actions: %s, %s, %s",
+        "Registered %s actions: %s, %s, %s, %s",
         DOMAIN,
         SERVICE_RECONFIGURE,
         SERVICE_REINTERVIEW,
         SERVICE_REJOIN,
+        SERVICE_PING,
     )
     return True
 
@@ -263,7 +281,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     Returns:
         ``True`` once the actions are removed.
     """
-    for service in (SERVICE_RECONFIGURE, SERVICE_REINTERVIEW, SERVICE_REJOIN):
+    for service in (
+        SERVICE_RECONFIGURE,
+        SERVICE_REINTERVIEW,
+        SERVICE_REJOIN,
+        SERVICE_PING,
+    ):
         hass.services.async_remove(DOMAIN, service)
     _LOGGER.debug("Removed %s actions", DOMAIN)
     return True

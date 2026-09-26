@@ -21,11 +21,12 @@ The helpers recover flaky Zigbee devices on a schedule, or in response to an eve
 | --- | --- | --- | --- |
 | [Reconfigure](#reconfigure) | `zha_tools.reconfigure` | Run a ZHA device reconfigure (re-run binding and reporting setup) with automatic retries. | Safe |
 | [Re-interview](#re-interview) | `zha_tools.reinterview` | Re-interview a device in place (rediscover its endpoints and clusters) with automatic retries. The device never leaves the network. | Safe |
+| [Ping](#ping) | `zha_tools.ping` | Check that a device answers, with automatic retries. Also brings back devices ZHA has given up on. | Safe |
 | [Rejoin](#rejoin) | `zha_tools.rejoin` | Ask a device to leave and immediately rejoin — a remote substitute for the pairing button. | ⚠️ Dangerous |
 
-All three actions report a status back to the caller and use `SupportsResponse.ONLY`, so a call **must** capture the response with `response_variable` (see [Troubleshooting](#troubleshooting)).
+All four actions report a status back to the caller and use `SupportsResponse.ONLY`, so a call **must** capture the response with `response_variable` (see [Troubleshooting](#troubleshooting)).
 
-Reconfigure and re-interview also run on [all devices](#running-on-all-devices) at once, instead of on a single one.
+Reconfigure, re-interview and ping also run on [all devices](#running-on-all-devices) at once, instead of on a single one.
 
 More helpers will be added to this list over time.
 
@@ -62,7 +63,7 @@ The `zha_tools.reconfigure` action triggers a ZHA device reconfigure for a singl
 
 ### Defaults
 
-The reconfigure defaults are edited via **Settings -> Devices & Services -> ZHA Tools -> Configure**:
+The defaults shared by reconfigure, re-interview and ping are edited via **Settings -> Devices & Services -> ZHA Tools -> Configure**:
 
 - **timeout** (default `20`) — the per-attempt timeout, in seconds. A single reconfigure attempt that does not finish within this time is reported as a `timeout` and (if retries remain) retried.
 - **max_retries** (default `10`) — the maximum number of retries *after* the first attempt. The total number of attempts is therefore up to `max_retries + 1`. A retry happens whenever the status is anything other than `complete`.
@@ -163,7 +164,7 @@ Add `response_variable` to the action:
     response_variable: result        # <-- required
 ```
 
-From **Developer Tools -> Actions**, enable the **Return response** toggle for the same reason. See [Response](#response) above for the keys returned in `result`. The same applies to the `reinterview` and `rejoin` actions below.
+From **Developer Tools -> Actions**, enable the **Return response** toggle for the same reason. See [Response](#response) above for the keys returned in `result`. The same applies to the `reinterview`, `ping` and `rejoin` actions below.
 
 ## Re-interview
 
@@ -192,9 +193,58 @@ The response is a mapping with `device_id`, `status` — one of `complete` (the 
   response_variable: result
 ```
 
+## Ping
+
+`zha_tools.ping` checks whether a device answers, and tries to re-establish contact when it does not. Each attempt reads an attribute from the device (the ZCL version from the Basic cluster, which every Zigbee device has), bypassing all caches. The device is only read from, so this is safe. It shares the reconfigure timeout/retry defaults and per-call overrides.
+
+Why it helps: once ZHA marks a device unavailable, it stops contacting it and waits for the device to transmit on its own. A device that stays quiet — or that rejoined under a new network address without the coordinator noticing — can then stay "unavailable" indefinitely. The ping fills that gap:
+
+- It is sent **even when ZHA marks the device unavailable** — that is the main use case.
+- If the radio fails to deliver a ping, zigpy resends it with a forced route discovery, so a stale route gets replaced.
+- After the first failed attempt, the device's **network address is looked up once** by its IEEE address (a ZDO `NWK_addr_req` broadcast), before the retry delay. If the device answers under a new address, ZHA uses that address from then on.
+- When the device answers, ZHA's own availability checker marks it **available again**, usually within a minute. You can follow up with a [reconfigure](#reconfigure) to restore binding and reporting.
+
+A ping cannot revive a device whose radio or firmware has hung; such a device still needs a power cycle or a re-pair. Battery-powered (sleepy) devices only pick up messages when they wake up, so give them a longer `timeout` or more retries.
+
+### Fields
+
+| Field | Required | Default | Description |
+| --- | --- | --- | --- |
+| `device_id` | yes, unless `all_devices` is used | — | The ZHA device to ping. |
+| `all_devices` | no | `false` | Ping every ZHA device except the coordinator, one after another. Cannot be combined with `device_id`. See [Running on all devices](#running-on-all-devices). |
+| `timeout` | no | configured default (`20`) | Seconds to wait for the device to answer each ping. |
+| `max_retries` | no | configured default (`10`) | Maximum number of retries after the first attempt. |
+| `retry_delay` | no | configured default (`5`) | Seconds to wait between attempts. |
+
+### Response
+
+The response is a mapping with `device_id`, `status` — one of `complete` (the device answered), `timeout` (no answer within `timeout`), or `unavailable` (the radio could not deliver the request, for example because no route to the device was found) — and `attempts`. An unexpected error during the ping is **not** swallowed: it propagates to the caller rather than being reported as a status.
+
+### Example
+
+Try hard to win back a device that ZHA has marked unavailable, then restore its binding and reporting:
+
+```yaml
+- action: zha_tools.ping
+  data:
+    device_id: 1234567890abcdef1234567890abcdef
+    timeout: 30
+    max_retries: 20
+    retry_delay: 60
+  response_variable: result
+- if:
+    - condition: template
+      value_template: "{{ result.status == 'complete' }}"
+  then:
+    - action: zha_tools.reconfigure
+      data:
+        device_id: 1234567890abcdef1234567890abcdef
+      response_variable: reconfigure_result
+```
+
 ## Running on all devices
 
-[Reconfigure](#reconfigure) and [re-interview](#re-interview) can work through your whole Zigbee network in one call. Pass `all_devices: true` instead of a `device_id`:
+[Reconfigure](#reconfigure), [re-interview](#re-interview) and [ping](#ping) can work through your whole Zigbee network in one call. Pass `all_devices: true` instead of a `device_id`:
 
 ```yaml
 - action: zha_tools.reconfigure
@@ -205,7 +255,7 @@ The response is a mapping with `device_id`, `status` — one of `complete` (the 
 
 What happens:
 
-- Every device ZHA manages is processed, **except the coordinator** — that is the radio itself, not a device that can be reconfigured or re-interviewed.
+- Every device ZHA manages is processed, **except the coordinator** — that is the radio itself, not a device that can be reconfigured, re-interviewed or pinged.
 - Devices are handled **one at a time**, in a predictable order (sorted by device name). The next device is only started once the previous one has finished — including all of its retries.
 - The run **always continues** with the next device, whatever the previous one reported: a `timeout`, an `unavailable` device or even an unexpected error does not stop it.
 - The timeout and retry fields apply *per device*, exactly as they do for a single-device call.
@@ -216,7 +266,7 @@ What happens:
 
 ### Only one at a time
 
-While a batched reconfigure or re-interview is running, **no second batched run may start** — neither of the same action nor of the other one. Two batches talking to the same Zigbee network in parallel would only make the radio traffic (and the results) worse. A second batched call fails immediately with an error saying which run is still in progress; single-device calls are not affected.
+While a batched reconfigure, re-interview or ping is running, **no second batched run may start** — neither of the same action nor of another one. Two batches talking to the same Zigbee network in parallel would only make the radio traffic (and the results) worse. A second batched call fails immediately with an error saying which run is still in progress; single-device calls are not affected.
 
 ### Response
 

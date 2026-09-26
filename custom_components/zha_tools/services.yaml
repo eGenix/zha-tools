@@ -20,8 +20,8 @@ reconfigure:
       description: >-
         Reconfigure every ZHA device except the coordinator, one after another,
         continuing with the next device whatever the previous one reported.
-        Cannot be combined with a device. Only one batched run (reconfigure or
-        re-interview) can be in progress at a time.
+        Cannot be combined with a device. Only one batched run (reconfigure,
+        re-interview or ping) can be in progress at a time.
       required: false
       example: true
       selector:
@@ -91,7 +91,7 @@ reinterview:
         Re-interview every ZHA device except the coordinator, one after
         another, continuing with the next device whatever the previous one
         reported. Cannot be combined with a device. Only one batched run
-        (reconfigure or re-interview) can be in progress at a time.
+        (reconfigure, re-interview or ping) can be in progress at a time.
       required: false
       example: true
       selector:
@@ -100,6 +100,77 @@ reinterview:
       name: Timeout
       description: >-
         Per-attempt timeout in seconds. Defaults to the configured value.
+      required: false
+      example: 20
+      selector:
+        number:
+          min: 1
+          max: 300
+          step: 1
+          unit_of_measurement: seconds
+          mode: box
+    max_retries:
+      name: Maximum retries
+      description: >-
+        Maximum number of retries after the first attempt. Defaults to the
+        configured value.
+      required: false
+      example: 10
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 1
+          mode: box
+    retry_delay:
+      name: Retry delay
+      description: >-
+        Seconds to wait between attempts. Defaults to the configured value.
+      required: false
+      example: 5
+      selector:
+        number:
+          min: 0
+          max: 300
+          step: 1
+          unit_of_measurement: seconds
+          mode: box
+
+ping:
+  name: Ping ZHA device
+  description: >-
+    Check that a ZHA device answers, retrying on failure, and return the
+    resulting status (complete, timeout or unavailable). Also pings devices ZHA
+    currently marks unavailable, so an answer brings them back; before the
+    first retry, the device's network address is looked up once. Safe: the
+    device is only read from. Works on a single device, or on all ZHA devices
+    except the coordinator.
+  fields:
+    device_id:
+      name: Device
+      description: >-
+        The ZHA device to ping. Required unless "All devices" is turned on.
+      required: false
+      selector:
+        device:
+          filter:
+            - integration: zha
+    all_devices:
+      name: All devices
+      description: >-
+        Ping every ZHA device except the coordinator, one after another,
+        continuing with the next device whatever the previous one reported.
+        Cannot be combined with a device. Only one batched run (reconfigure,
+        re-interview or ping) can be in progress at a time.
+      required: false
+      example: true
+      selector:
+        boolean:
+    timeout:
+      name: Timeout
+      description: >-
+        Seconds to wait for the device to answer each ping. Defaults to the
+        configured value.
       required: false
       example: 20
       selector:

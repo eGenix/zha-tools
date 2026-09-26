@@ -7,6 +7,7 @@ DOMAIN = "zha_tools"
 SERVICE_RECONFIGURE = "reconfigure"
 SERVICE_REINTERVIEW = "reinterview"
 SERVICE_REJOIN = "rejoin"
+SERVICE_PING = "ping"
 
 # Service / options keys.
 ATTR_DEVICE_ID = "device_id"
@@ -19,13 +20,13 @@ CONF_CONFIRM = "confirm"
 
 # Default values (all user configurable via the options flow and overridable
 # per service call).
-DEFAULT_TIMEOUT = 20  # seconds to wait for a single reconfigure/re-interview attempt
+DEFAULT_TIMEOUT = 20  # seconds to wait for a single attempt of a retried action
 DEFAULT_MAX_RETRIES = 10  # additional attempts after the first one
 DEFAULT_RETRY_DELAY = 5  # seconds to wait between attempts
 DEFAULT_REJOIN_WAIT = 60  # seconds to wait for a device to return after a rejoin
 
 # Reported outcomes.
-STATUS_COMPLETE = "complete"  # finished, binding and reporting succeeded
+STATUS_COMPLETE = "complete"  # finished successfully (e.g. binding and reporting ok)
 STATUS_INCOMPLETE = "incomplete"  # finished, but binding/reporting failed
 STATUS_TIMEOUT = "timeout"  # attempt did not finish within the timeout
 STATUS_UNAVAILABLE = "unavailable"  # device did not respond

@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "ZHA Tools",
-        "description": "Add ZHA Tools. You can change the default timeout and retry behaviour of the reconfigure action later from the integration options."
+        "description": "Add ZHA Tools. You can change the default timeout and retry behaviour of the reconfigure, re-interview and ping actions later from the integration options."
       }
     },
     "abort": {
@@ -15,7 +15,7 @@
     "step": {
       "init": {
         "title": "ZHA Tools defaults",
-        "description": "Default values used by the reconfigure and re-interview actions when not overridden in the call.",
+        "description": "Default values used by the reconfigure, re-interview and ping actions when not overridden in the call.",
         "data": {
           "timeout": "Timeout (seconds)",
           "max_retries": "Maximum retries",
@@ -66,6 +66,32 @@
         "timeout": {
           "name": "Timeout",
           "description": "Per-attempt timeout in seconds. Defaults to the configured value."
+        },
+        "max_retries": {
+          "name": "Maximum retries",
+          "description": "Maximum number of retries after the first attempt. Defaults to the configured value."
+        },
+        "retry_delay": {
+          "name": "Retry delay",
+          "description": "Seconds to wait between attempts. Defaults to the configured value."
+        }
+      }
+    },
+    "ping": {
+      "name": "Ping ZHA device",
+      "description": "Check that a ZHA device answers, retrying on failure. Also pings devices ZHA currently marks unavailable, so an answer brings them back; before the first retry, the device's network address is looked up once. Safe: the device is only read from. Works on a single device, or on all ZHA devices except the coordinator.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The ZHA device to ping. Required unless All devices is turned on."
+        },
+        "all_devices": {
+          "name": "All devices",
+          "description": "Ping every ZHA device except the coordinator, one after another, continuing with the next device whatever the previous one reported. Cannot be combined with a device, and only one batched run can be in progress at a time."
+        },
+        "timeout": {
+          "name": "Timeout",
+          "description": "Seconds to wait for the device to answer each ping. Defaults to the configured value."
         },
         "max_retries": {
           "name": "Maximum retries",

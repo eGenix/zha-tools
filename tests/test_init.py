@@ -16,6 +16,7 @@ from custom_components.zha_tools.const import (
     CONF_RETRY_DELAY,
     CONF_TIMEOUT,
     DOMAIN,
+    SERVICE_PING,
     SERVICE_RECONFIGURE,
     SERVICE_REINTERVIEW,
     SERVICE_REJOIN,
@@ -23,7 +24,12 @@ from custom_components.zha_tools.const import (
     STATUS_REQUESTED,
 )
 
-ALL_SERVICES = (SERVICE_RECONFIGURE, SERVICE_REINTERVIEW, SERVICE_REJOIN)
+ALL_SERVICES = (
+    SERVICE_RECONFIGURE,
+    SERVICE_REINTERVIEW,
+    SERVICE_REJOIN,
+    SERVICE_PING,
+)
 
 DEFAULT_OPTIONS = {CONF_TIMEOUT: 10, CONF_MAX_RETRIES: 10, CONF_RETRY_DELAY: 5}
 
@@ -71,6 +77,29 @@ async def test_reinterview_returns_response(hass):
     assert mock.await_args.kwargs == {
         "timeout": 10.0,
         "max_retries": 10,
+        "retry_delay": 5.0,
+    }
+
+
+async def test_ping_returns_response(hass):
+    await _setup(hass)
+    expected = {"device_id": "dev1", "status": STATUS_COMPLETE, "attempts": 1}
+    with patch(
+        "custom_components.zha_tools.async_ping_device",
+        AsyncMock(return_value=expected),
+    ) as mock:
+        result = await hass.services.async_call(
+            DOMAIN,
+            SERVICE_PING,
+            {"device_id": "dev1", "max_retries": 3},
+            blocking=True,
+            return_response=True,
+        )
+    assert result == expected
+    # Shares the reconfigure defaults, with per-call overrides.
+    assert mock.await_args.kwargs == {
+        "timeout": 10.0,
+        "max_retries": 3,
         "retry_delay": 5.0,
     }
 
@@ -187,6 +216,7 @@ async def test_service_requires_device_id(hass):
     [
         (SERVICE_RECONFIGURE, "async_reconfigure_device"),
         (SERVICE_REINTERVIEW, "async_reinterview_device"),
+        (SERVICE_PING, "async_ping_device"),
     ],
 )
 async def test_all_devices_runs_a_batch(hass, service, action):

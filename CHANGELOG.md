@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `zha_tools.ping` action: checks that a device answers by reading an attribute from it (bypassing all caches), with the same `device_id` / `all_devices`, `timeout`, `max_retries` and `retry_delay` fields and response as `reconfigure` and `reinterview`. Unlike those, it is also sent to devices ZHA marks unavailable, so an answer brings them back. After the first failed attempt, the device's network address is looked up once, to find devices that rejoined under a new address. Statuses: `complete`, `timeout`, `unavailable`.
+
 ## [0.3.0] - 2026-09-20
 
 ### Added
@@ -33,6 +39,7 @@ Initial release of ZHA Tools, a Home Assistant custom integration that provides 
 - Debug logging of each attempt and of the binding / configure-reporting results reported back by ZHA.
 - A bundled brand logo with light and dark variants, served directly by the integration on Home Assistant 2026.3.0 and newer.
 
+[Unreleased]: https://github.com/egenix/zha-tools/compare/v0.3.0...HEAD
 [0.3.0]: https://github.com/egenix/zha-tools/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/egenix/zha-tools/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/egenix/zha-tools/releases/tag/v0.1.0
