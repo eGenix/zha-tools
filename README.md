@@ -22,11 +22,12 @@ The helpers recover flaky Zigbee devices on a schedule, or in response to an eve
 | [Reconfigure](#reconfigure) | `zha_tools.reconfigure` | Run a ZHA device reconfigure (re-run binding and reporting setup) with automatic retries. | Safe |
 | [Re-interview](#re-interview) | `zha_tools.reinterview` | Re-interview a device in place (rediscover its endpoints and clusters) with automatic retries. The device never leaves the network. | Safe |
 | [Ping](#ping) | `zha_tools.ping` | Check that a device answers, with automatic retries. Also brings back devices ZHA has given up on. | Safe |
+| [Frame counter](#frame-counter) | `zha_tools.frame_counter` | Read the network frame counter the coordinator stores for a device, to track down frame counter failures. | Safe |
 | [Rejoin](#rejoin) | `zha_tools.rejoin` | Ask a device to leave and immediately rejoin — a remote substitute for the pairing button. | ⚠️ Dangerous |
 
-All four actions report a status back to the caller and use `SupportsResponse.ONLY`, so a call **must** capture the response with `response_variable` (see [Troubleshooting](#troubleshooting)).
+All five actions report a status back to the caller and use `SupportsResponse.ONLY`, so a call **must** capture the response with `response_variable` (see [Troubleshooting](#troubleshooting)).
 
-Reconfigure, re-interview and ping also run on [all devices](#running-on-all-devices) at once, instead of on a single one.
+Reconfigure, re-interview, ping and frame counter also run on [all devices](#running-on-all-devices) at once, instead of on a single one.
 
 More helpers will be added to this list over time.
 
@@ -164,7 +165,7 @@ Add `response_variable` to the action:
     response_variable: result        # <-- required
 ```
 
-From **Developer Tools -> Actions**, enable the **Return response** toggle for the same reason. See [Response](#response) above for the keys returned in `result`. The same applies to the `reinterview`, `ping` and `rejoin` actions below.
+From **Developer Tools -> Actions**, enable the **Return response** toggle for the same reason. See [Response](#response) above for the keys returned in `result`. The same applies to the `reinterview`, `ping`, `frame_counter` and `rejoin` actions below.
 
 ## Re-interview
 
@@ -242,9 +243,65 @@ Try hard to win back a device that ZHA has marked unavailable, then restore its 
       response_variable: reconfigure_result
 ```
 
+## Frame counter
+
+`zha_tools.frame_counter` reads the incoming network (NWK) frame counter that the coordinator stores for a device. It is a diagnostic aid for networks where the coordinator's `NWK_FRAME_COUNTER_FAILURE` (and often `NWK_DECRYPTION_FAILURE`) counters keep rising. The radio firmware only counts these failures; it never says which device caused them. Only the coordinator's own radio is queried and nothing is sent over the air, so this is safe. A read is quick, so it is not retried.
+
+Some background:
+
+- Every encrypted Zigbee frame carries a frame counter which the sender increases with each frame. The receiver remembers the highest counter it accepted from each sender and drops anything at or below it as a replay, counting a `NWK_FRAME_COUNTER_FAILURE`.
+- Network-layer encryption is applied **hop by hop**, so the coordinator only keeps these counters for its **direct neighbors**, and only frames from a direct neighbor can cause the failure. Every other device is reported with status `not_neighbor`.
+- The usual culprit is a router that reset its own outgoing counter — after a power cut, a crash or a firmware update. The coordinator then drops everything it sends until its counter climbs past the remembered value again.
+
+How to spot it: read the counters a few times, some minutes apart. A neighbor whose `last_seen` keeps moving on while its `frame_counter` stays the same is getting its frames dropped. A healthy neighbor's counter goes up between reads. Once found, power-cycling the device usually helps; otherwise a [rejoin](#rejoin) or re-pair resets the counters on both sides.
+
+> [!NOTE]
+> This needs a Silicon Labs radio (EZSP protocol version 8 or later, used by ZHA's `bellows` radio library — for example the Home Assistant SkyConnect / Connect ZBT-1, Sonoff ZBDongle-E or Home Assistant Yellow). On other radios the action fails with an error.
+
+### Fields
+
+| Field | Required | Default | Description |
+| --- | --- | --- | --- |
+| `device_id` | yes, unless `all_devices` is used | — | The ZHA device to read the frame counter for. |
+| `all_devices` | no | `false` | Read the frame counter of every ZHA device except the coordinator. Cannot be combined with `device_id`. See [Running on all devices](#running-on-all-devices). |
+
+### Response
+
+The response is a mapping with:
+
+- `device_id` (string) — the device the counter belongs to.
+- `ieee` (string) — the device's IEEE address.
+- `status` (string) — `complete` (the counter was read) or `not_neighbor` (the device is not a direct neighbor of the coordinator, so no counter is stored).
+- `frame_counter` (integer or `null`) — the highest frame counter the coordinator has accepted from the device; `null` for `not_neighbor`.
+- `last_seen` (string or `null`) — when the coordinator last heard from the device, as an ISO 8601 UTC timestamp.
+
+An unexpected error, such as an unsupported radio, is **not** swallowed: it propagates to the caller rather than being reported as a status. In an [all-devices](#running-on-all-devices) run, `not_neighbor` devices count as `failed`; filter on `status == 'complete'` to get the neighbors.
+
+### Example
+
+Log the counters of all coordinator neighbors every 10 minutes, to compare them over time in the logbook:
+
+```yaml
+triggers:
+  - trigger: time_pattern
+    minutes: /10
+actions:
+  - action: zha_tools.frame_counter
+    data:
+      all_devices: true
+    response_variable: result
+  - action: logbook.log
+    data:
+      name: ZHA frame counters
+      message: >-
+        {% for d in result.devices | selectattr('status', 'eq', 'complete') %}
+        {{ d.ieee }}: {{ d.frame_counter }} (last seen {{ d.last_seen }});
+        {% endfor %}
+```
+
 ## Running on all devices
 
-[Reconfigure](#reconfigure), [re-interview](#re-interview) and [ping](#ping) can work through your whole Zigbee network in one call. Pass `all_devices: true` instead of a `device_id`:
+[Reconfigure](#reconfigure), [re-interview](#re-interview), [ping](#ping) and [frame counter](#frame-counter) can work through your whole Zigbee network in one call. Pass `all_devices: true` instead of a `device_id`:
 
 ```yaml
 - action: zha_tools.reconfigure
@@ -255,7 +312,7 @@ Try hard to win back a device that ZHA has marked unavailable, then restore its 
 
 What happens:
 
-- Every device ZHA manages is processed, **except the coordinator** — that is the radio itself, not a device that can be reconfigured, re-interviewed or pinged.
+- Every device ZHA manages is processed, **except the coordinator** — that is the radio itself, not a device that can be reconfigured, re-interviewed or pinged, and it keeps no frame counter for itself.
 - Devices are handled **one at a time**, in a predictable order (sorted by device name). The next device is only started once the previous one has finished — including all of its retries.
 - The run **always continues** with the next device, whatever the previous one reported: a `timeout`, an `unavailable` device or even an unexpected error does not stop it.
 - The timeout and retry fields apply *per device*, exactly as they do for a single-device call.
@@ -266,13 +323,13 @@ What happens:
 
 ### Only one at a time
 
-While a batched reconfigure, re-interview or ping is running, **no second batched run may start** — neither of the same action nor of another one. Two batches talking to the same Zigbee network in parallel would only make the radio traffic (and the results) worse. A second batched call fails immediately with an error saying which run is still in progress; single-device calls are not affected.
+While a batched reconfigure, re-interview, ping or frame counter run is in progress, **no second batched run may start** — neither of the same action nor of another one. Two batches talking to the same Zigbee network in parallel would only make the radio traffic (and the results) worse. A second batched call fails immediately with an error saying which run is still in progress; single-device calls are not affected.
 
 ### Response
 
 The response for an all-devices run is a mapping with:
 
-- `devices` (list) — one entry per device, in the order they were processed. Each entry is the same mapping a single-device call returns (`device_id`, `status`, `attempts`), except when the action raised an unexpected error for that device: then the entry has `status: error` and an `error` key with the error message (the full traceback is written to the log).
+- `devices` (list) — one entry per device, in the order they were processed. Each entry is the same mapping a single-device call returns (for example `device_id`, `status`, `attempts`), except when the action raised an unexpected error for that device: then the entry has `status: error` and an `error` key with the error message (the full traceback is written to the log).
 - `total` (integer) — the number of devices processed.
 - `complete` (integer) — how many of them ended with status `complete`.
 - `failed` (integer) — how many did not, that is `total - complete`.

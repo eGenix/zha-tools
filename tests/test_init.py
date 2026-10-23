@@ -16,6 +16,7 @@ from custom_components.zha_tools.const import (
     CONF_RETRY_DELAY,
     CONF_TIMEOUT,
     DOMAIN,
+    SERVICE_FRAME_COUNTER,
     SERVICE_PING,
     SERVICE_RECONFIGURE,
     SERVICE_REINTERVIEW,
@@ -29,6 +30,7 @@ ALL_SERVICES = (
     SERVICE_REINTERVIEW,
     SERVICE_REJOIN,
     SERVICE_PING,
+    SERVICE_FRAME_COUNTER,
 )
 
 DEFAULT_OPTIONS = {CONF_TIMEOUT: 10, CONF_MAX_RETRIES: 10, CONF_RETRY_DELAY: 5}
@@ -102,6 +104,79 @@ async def test_ping_returns_response(hass):
         "max_retries": 3,
         "retry_delay": 5.0,
     }
+
+
+async def test_frame_counter_returns_response(hass):
+    await _setup(hass)
+    expected = {
+        "device_id": "dev1",
+        "ieee": "00:11:22:33:44:55:66:77",
+        "status": STATUS_COMPLETE,
+        "frame_counter": 4711,
+        "last_seen": None,
+    }
+    with patch(
+        "custom_components.zha_tools.async_read_frame_counter",
+        AsyncMock(return_value=expected),
+    ) as mock:
+        result = await hass.services.async_call(
+            DOMAIN,
+            SERVICE_FRAME_COUNTER,
+            {"device_id": "dev1"},
+            blocking=True,
+            return_response=True,
+        )
+    assert result == expected
+    assert mock.await_args.args[1] == "dev1"
+    assert mock.await_args.kwargs == {}
+
+
+async def test_frame_counter_all_devices_runs_a_batch(hass):
+    """The frame counter batch passes no retry parameters."""
+    await _setup(hass)
+    expected = {"devices": [], "total": 0, "complete": 0, "failed": 0}
+    with patch(
+        "custom_components.zha_tools.async_run_on_all_devices",
+        AsyncMock(return_value=expected),
+    ) as mock:
+        result = await hass.services.async_call(
+            DOMAIN,
+            SERVICE_FRAME_COUNTER,
+            {"all_devices": True},
+            blocking=True,
+            return_response=True,
+        )
+    assert result == expected
+    args = mock.await_args.args
+    assert args[1] is zha_tools.async_read_frame_counter
+    assert args[2] == SERVICE_FRAME_COUNTER
+    assert mock.await_args.kwargs == {}
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"device_id": "dev1", "all_devices": True},
+        {},
+        {"device_id": "dev1", "timeout": 5},
+    ],
+    ids=["both", "neither", "retry-option"],
+)
+async def test_frame_counter_rejects_invalid_targets(hass, data):
+    await _setup(hass)
+    with patch(
+        "custom_components.zha_tools.async_read_frame_counter",
+        AsyncMock(return_value={}),
+    ) as mock:
+        with pytest.raises(Exception):
+            await hass.services.async_call(
+                DOMAIN,
+                SERVICE_FRAME_COUNTER,
+                data,
+                blocking=True,
+                return_response=True,
+            )
+    mock.assert_not_awaited()
 
 
 async def test_rejoin_returns_response(hass):

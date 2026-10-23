@@ -8,6 +8,7 @@ SERVICE_RECONFIGURE = "reconfigure"
 SERVICE_REINTERVIEW = "reinterview"
 SERVICE_REJOIN = "rejoin"
 SERVICE_PING = "ping"
+SERVICE_FRAME_COUNTER = "frame_counter"
 
 # Service / options keys.
 ATTR_DEVICE_ID = "device_id"
@@ -31,6 +32,7 @@ STATUS_INCOMPLETE = "incomplete"  # finished, but binding/reporting failed
 STATUS_TIMEOUT = "timeout"  # attempt did not finish within the timeout
 STATUS_UNAVAILABLE = "unavailable"  # device did not respond
 STATUS_REQUESTED = "requested"  # rejoin request was sent; the outcome is unconfirmed
+STATUS_NOT_NEIGHBOR = "not_neighbor"  # coordinator stores no frame counter for it
 STATUS_ERROR = "error"  # the action raised an error for this device (batch runs only)
 
 # Keys used in the service response and the per-attempt result.

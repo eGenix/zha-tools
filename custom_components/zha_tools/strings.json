@@ -103,6 +103,20 @@
         }
       }
     },
+    "frame_counter": {
+      "name": "Read ZHA device frame counter",
+      "description": "Read the incoming network (NWK) frame counter the coordinator stores for a ZHA device, together with the time it was last seen. Helps find the devices behind rising frame counter failures: a device that keeps being seen while its counter stays the same is having its frames dropped. Only direct neighbors of the coordinator have a counter. Needs a Silicon Labs (EZSP) radio. Works on a single device, or on all ZHA devices except the coordinator.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The ZHA device to read the frame counter for. Required unless All devices is turned on."
+        },
+        "all_devices": {
+          "name": "All devices",
+          "description": "Read the frame counter of every ZHA device except the coordinator. Cannot be combined with a device, and only one batched run can be in progress at a time."
+        }
+      }
+    },
     "rejoin": {
       "name": "DANGER: rejoin ZHA device",
       "description": "Ask a ZHA device to leave the network and immediately rejoin it (a remote substitute for the pairing button). DANGER: if the device firmware ignores the rejoin flag it will leave and not return, needing a manual re-pair. Prefer Re-interview unless a full rejoin is truly needed.",

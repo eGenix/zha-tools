@@ -26,6 +26,9 @@ _ZCL_VERSION_ATTR_ID = 0x0000
 # Endpoint 0 is the Zigbee Device Object (ZDO), which carries no ZCL clusters.
 _ZDO_ENDPOINT_ID = 0
 
+# The EZSP ``getNeighborFrameCounter`` command was added in EZSP version 8.
+_MIN_EZSP_VERSION_FRAME_COUNTER = 8
+
 
 class DeviceUnreachableError(Exception):
     """The radio could not deliver a request to the device.
@@ -242,4 +245,55 @@ async def async_trigger_address_refresh(device: object) -> None:
         device.ieee,
         AddrRequestType.Single,
         0,  # start index
+    )
+
+
+async def async_get_neighbor_frame_counter(device: object) -> int | None:
+    """Return the coordinator's incoming NWK frame counter for a ZHA device.
+
+    Zigbee network (NWK) layer security is applied hop by hop, so the
+    coordinator only tracks incoming frame counters for its direct neighbors.
+    The counter is the highest one accepted from that neighbor so far; frames
+    carrying a counter at or below it are dropped as replays and counted as
+    ``NWK_FRAME_COUNTER_FAILURE``.
+
+    This is read from the radio firmware with the EZSP
+    ``getNeighborFrameCounter`` command, so it only works with Silicon Labs
+    (bellows / EZSP version 8 or later) radios. bellows does not expose its EZSP
+    connection publicly; it is reached through the controller's ``_ezsp``
+    attribute.
+
+    Args:
+        device: A ZHA device object as returned by ``async_get_zha_device``.
+
+    Returns:
+        The frame counter, or ``None`` if the device is not a neighbor of the
+        coordinator (the firmware stores no counter for it).
+
+    Raises:
+        HomeAssistantError: If the radio is not an EZSP radio, its EZSP version
+            is too old, or the firmware reports an unexpected status.
+    """
+    ezsp = getattr(device.gateway.application_controller, "_ezsp", None)
+    if ezsp is None:
+        raise HomeAssistantError(
+            "Reading frame counters needs a Silicon Labs (EZSP / bellows) radio"
+        )
+    if ezsp.ezsp_version < _MIN_EZSP_VERSION_FRAME_COUNTER:
+        raise HomeAssistantError(
+            f"Reading frame counters needs EZSP version "
+            f"{_MIN_EZSP_VERSION_FRAME_COUNTER} or later; the radio speaks "
+            f"version {ezsp.ezsp_version}"
+        )
+
+    status, frame_counter = await ezsp.getNeighborFrameCounter(eui64=device.ieee)
+    # The status is an ``EmberStatus`` before EZSP version 14 and an
+    # ``sl_Status`` from then on. Both use 0 for success and name the
+    # "no such neighbor" case ``NOT_FOUND``.
+    if status == 0:
+        return int(frame_counter)
+    if getattr(status, "name", None) == "NOT_FOUND":
+        return None
+    raise HomeAssistantError(
+        f"Reading the frame counter of ZHA device {device.name} failed: {status!r}"
     )

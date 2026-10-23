@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `zha_tools.frame_counter` action: reads the incoming network (NWK) frame counter the coordinator stores for a device, plus its IEEE address and when it was last seen, to help track down the devices behind rising `NWK_FRAME_COUNTER_FAILURE` counts. Only direct neighbors of the coordinator have such a counter; other devices are reported as `not_neighbor`. Accepts `device_id` or `all_devices`. Needs a Silicon Labs (EZSP version 8 or later) radio.
+
 ## [0.4.0] - 2026-09-26
 
 ### Added

@@ -7,10 +7,12 @@ Provides a small collection of ZHA helper actions that automations can call:
 * ``zha_tools.rejoin`` -- ask a device to leave and immediately rejoin
   (a remote substitute for the pairing button -- see the danger notes);
 * ``zha_tools.ping`` -- check that a device answers, with retries, which also
-  brings back devices ZHA has given up on.
+  brings back devices ZHA has given up on;
+* ``zha_tools.frame_counter`` -- read the incoming network frame counter the
+  coordinator stores for a device, to track down frame counter failures.
 
 Each action returns the resulting status to the caller. Reconfigure,
-re-interview and ping can either work on a single ``device_id`` or, with
+re-interview, ping and frame counter can either work on a single ``device_id`` or, with
 ``all_devices: true``, on every ZHA device except the coordinator.
 """
 
@@ -44,11 +46,13 @@ from .const import (
     DEFAULT_RETRY_DELAY,
     DEFAULT_TIMEOUT,
     DOMAIN,
+    SERVICE_FRAME_COUNTER,
     SERVICE_PING,
     SERVICE_RECONFIGURE,
     SERVICE_REINTERVIEW,
     SERVICE_REJOIN,
 )
+from .frame_counter import async_read_frame_counter
 from .ping import async_ping_device
 from .reconfigure import async_reconfigure_device
 from .reinterview import async_reinterview_device
@@ -72,6 +76,18 @@ _RETRY_SCHEMA = vol.Schema(
             vol.Optional(CONF_RETRY_DELAY): vol.All(
                 vol.Coerce(float), vol.Range(min=0)
             ),
+        },
+        cv.has_at_least_one_key(ATTR_DEVICE_ID, CONF_ALL_DEVICES),
+    )
+)
+
+# The frame counter read is a single, quick query of the coordinator's radio, so
+# it takes the same target as the retried actions but no retry parameters.
+_FRAME_COUNTER_SCHEMA = vol.Schema(
+    vol.All(
+        {
+            vol.Exclusive(ATTR_DEVICE_ID, "target"): cv.string,
+            vol.Exclusive(CONF_ALL_DEVICES, "target"): cv.boolean,
         },
         cv.has_at_least_one_key(ATTR_DEVICE_ID, CONF_ALL_DEVICES),
     )
@@ -175,11 +191,12 @@ async def _async_handle_retry_action(
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up ZHA Tools from a config entry.
 
-    Registers the ``reconfigure``, ``reinterview``, ``rejoin`` and ``ping``
-    actions. The single config entry's options supply the default timeout and
-    retry behaviour shared by reconfigure, re-interview and ping; each can be
-    overridden per call. Those three also accept ``all_devices: true`` instead
-    of a ``device_id``, to work through every ZHA device except the coordinator.
+    Registers the ``reconfigure``, ``reinterview``, ``rejoin``, ``ping`` and
+    ``frame_counter`` actions. The single config entry's options supply the
+    default timeout and retry behaviour shared by reconfigure, re-interview and
+    ping; each can be overridden per call. Those three and frame counter also
+    accept ``all_devices: true`` instead of a ``device_id``, to work through
+    every ZHA device except the coordinator.
 
     Args:
         hass: The Home Assistant instance.
@@ -206,6 +223,32 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         return await _async_handle_retry_action(
             hass, entry, call, SERVICE_PING, async_ping_device
         )
+
+    async def handle_frame_counter(call: ServiceCall) -> ServiceResponse:
+        """Handle a frame counter call and return the counter(s) read."""
+        all_devices = call.data.get(CONF_ALL_DEVICES, False)
+        device_id = call.data.get(ATTR_DEVICE_ID)
+        _LOGGER.debug(
+            "Service %s.%s called for %s",
+            DOMAIN,
+            SERVICE_FRAME_COUNTER,
+            "all devices" if all_devices else f"device {device_id}",
+        )
+        if all_devices:
+            result = await async_run_on_all_devices(
+                hass, async_read_frame_counter, SERVICE_FRAME_COUNTER
+            )
+        elif device_id:
+            result = await async_read_frame_counter(hass, device_id)
+        else:
+            raise ServiceValidationError(
+                f"{DOMAIN}.{SERVICE_FRAME_COUNTER} needs either a device_id or "
+                f"all_devices set to true"
+            )
+        _LOGGER.debug(
+            "Service %s.%s returning %s", DOMAIN, SERVICE_FRAME_COUNTER, result
+        )
+        return result
 
     async def handle_rejoin(call: ServiceCall) -> ServiceResponse:
         """Handle a rejoin call and return the resulting status."""
@@ -255,18 +298,26 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     hass.services.async_register(
         DOMAIN,
+        SERVICE_FRAME_COUNTER,
+        handle_frame_counter,
+        schema=_FRAME_COUNTER_SCHEMA,
+        supports_response=SupportsResponse.ONLY,
+    )
+    hass.services.async_register(
+        DOMAIN,
         SERVICE_REJOIN,
         handle_rejoin,
         schema=REJOIN_SCHEMA,
         supports_response=SupportsResponse.ONLY,
     )
     _LOGGER.debug(
-        "Registered %s actions: %s, %s, %s, %s",
+        "Registered %s actions: %s, %s, %s, %s, %s",
         DOMAIN,
         SERVICE_RECONFIGURE,
         SERVICE_REINTERVIEW,
         SERVICE_REJOIN,
         SERVICE_PING,
+        SERVICE_FRAME_COUNTER,
     )
     return True
 
@@ -286,6 +337,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         SERVICE_REINTERVIEW,
         SERVICE_REJOIN,
         SERVICE_PING,
+        SERVICE_FRAME_COUNTER,
     ):
         hass.services.async_remove(DOMAIN, service)
     _LOGGER.debug("Removed %s actions", DOMAIN)
