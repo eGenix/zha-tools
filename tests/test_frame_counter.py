@@ -9,6 +9,7 @@ object, since bellows is not installed in the test environment.
 from __future__ import annotations
 
 import enum
+import logging
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -83,6 +84,29 @@ async def test_not_neighbor_when_no_counter_is_stored(hass):
         "frame_counter": None,
         "last_seen": None,
     }
+
+
+@pytest.mark.parametrize(
+    ("frame_counter", "level"),
+    [
+        (0, logging.INFO),
+        (100, logging.INFO),
+        (101, logging.WARNING),
+        (1000, logging.WARNING),
+        (1001, logging.ERROR),
+    ],
+)
+async def test_log_level_depends_on_counter(hass, caplog, frame_counter, level):
+    device = SimpleNamespace(ieee=IEEE, last_seen=None)
+    read = AsyncMock(return_value=frame_counter)
+
+    with caplog.at_level(logging.INFO):
+        await _run(hass, device, read)
+
+    records = [r for r in caplog.records if "frame counter" in r.getMessage()]
+    assert len(records) == 1
+    assert records[0].levelno == level
+    assert str(frame_counter) in records[0].getMessage()
 
 
 async def test_errors_propagate(hass):

@@ -26,6 +26,11 @@ DEFAULT_MAX_RETRIES = 10  # additional attempts after the first one
 DEFAULT_RETRY_DELAY = 5  # seconds to wait between attempts
 DEFAULT_REJOIN_WAIT = 60  # seconds to wait for a device to return after a rejoin
 
+# Frame counter values above which the frame counter action logs the counter as a
+# warning resp. an error instead of at info level.
+FRAME_COUNTER_WARNING_THRESHOLD = 100
+FRAME_COUNTER_ERROR_THRESHOLD = 1000
+
 # Reported outcomes.
 STATUS_COMPLETE = "complete"  # finished successfully (e.g. binding and reporting ok)
 STATUS_INCOMPLETE = "incomplete"  # finished, but binding/reporting failed

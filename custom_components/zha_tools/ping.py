@@ -28,6 +28,7 @@ import logging
 from homeassistant.core import HomeAssistant
 
 from .const import STATUS_COMPLETE, STATUS_TIMEOUT, STATUS_UNAVAILABLE
+from .helpers import device_label
 
 # Imported as module-level names so tests can patch them on this module.
 from .zha_adapter import (
@@ -54,12 +55,13 @@ async def _async_ping_once(hass: HomeAssistant, device_id: str, timeout: float) 
     Raises:
         ServiceValidationError: If ``device_id`` is not a known ZHA device.
     """
+    name = device_label(hass, device_id)
     device = async_get_zha_device(hass, device_id)
     was_available = device.available
 
     _LOGGER.debug(
         "Pinging ZHA device %s (timeout %ss, ZHA marks it %s)",
-        device_id,
+        name,
         timeout,
         "available" if was_available else "unavailable",
     )
@@ -68,7 +70,7 @@ async def _async_ping_once(hass: HomeAssistant, device_id: str, timeout: float) 
     except TimeoutError:
         _LOGGER.warning(
             "ZHA device %s did not answer the ping within %ss, reporting %s",
-            device_id,
+            name,
             timeout,
             STATUS_TIMEOUT,
         )
@@ -76,19 +78,19 @@ async def _async_ping_once(hass: HomeAssistant, device_id: str, timeout: float) 
     except DeviceUnreachableError as err:
         _LOGGER.warning(
             "Ping to ZHA device %s could not be delivered (%s), reporting %s",
-            device_id,
+            name,
             err,
             STATUS_UNAVAILABLE,
         )
         return STATUS_UNAVAILABLE
 
     if was_available:
-        _LOGGER.info("ZHA device %s answered the ping", device_id)
+        _LOGGER.info("ZHA device %s answered the ping", name)
     else:
         _LOGGER.info(
             "ZHA device %s answered the ping; ZHA will mark it available again "
             "at its next availability check",
-            device_id,
+            name,
         )
     return STATUS_COMPLETE
 
@@ -103,8 +105,9 @@ async def _async_refresh_address(hass: HomeAssistant, device_id: str) -> None:
     Raises:
         ServiceValidationError: If ``device_id`` is not a known ZHA device.
     """
+    name = device_label(hass, device_id)
     device = async_get_zha_device(hass, device_id)
-    _LOGGER.debug("Looking up the current network address of ZHA device %s", device_id)
+    _LOGGER.debug("Looking up the current network address of ZHA device %s", name)
     await async_trigger_address_refresh(device)
 
 
@@ -135,10 +138,11 @@ async def async_ping_device(
     Raises:
         ServiceValidationError: If ``device_id`` is not a known ZHA device.
     """
+    name = device_label(hass, device_id)
     max_attempts = max_retries + 1
     _LOGGER.info(
         "Pinging ZHA device %s (timeout=%ss, max_retries=%s, retry_delay=%ss)",
-        device_id,
+        name,
         timeout,
         max_retries,
         retry_delay,
@@ -150,14 +154,14 @@ async def async_ping_device(
         attempts += 1
         _LOGGER.debug(
             "Ping of %s: starting attempt %d of %d",
-            device_id,
+            name,
             attempts,
             max_attempts,
         )
         status = await _async_ping_once(hass, device_id, timeout)
         _LOGGER.info(
             "Ping of %s: attempt %d of %d returned %s",
-            device_id,
+            name,
             attempts,
             max_attempts,
             status,
@@ -170,7 +174,7 @@ async def async_ping_device(
             await _async_refresh_address(hass, device_id)
         _LOGGER.debug(
             "Ping of %s: status %s, retrying in %ss",
-            device_id,
+            name,
             status,
             retry_delay,
         )
@@ -179,7 +183,7 @@ async def async_ping_device(
     log = _LOGGER.info if status == STATUS_COMPLETE else _LOGGER.warning
     log(
         "Ping of %s finished after %d attempt(s) with status %s",
-        device_id,
+        name,
         attempts,
         status,
     )

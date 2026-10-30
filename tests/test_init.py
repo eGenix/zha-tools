@@ -60,6 +60,32 @@ async def test_services_registered_and_removed(hass):
         assert not hass.services.has_service(DOMAIN, service)
 
 
+@pytest.mark.parametrize(
+    ("service", "action", "data"),
+    [
+        (SERVICE_RECONFIGURE, "async_reconfigure_device", {"device_id": "dev1"}),
+        (SERVICE_REINTERVIEW, "async_reinterview_device", {"device_id": "dev1"}),
+        (SERVICE_PING, "async_ping_device", {"device_id": "dev1"}),
+        (SERVICE_FRAME_COUNTER, "async_read_frame_counter", {"device_id": "dev1"}),
+        (
+            SERVICE_REJOIN,
+            "async_rejoin_device",
+            {"device_id": "dev1", "confirm": True},
+        ),
+    ],
+)
+async def test_actions_run_without_response(hass, service, action, data):
+    """The response is optional: callers need not set a response_variable."""
+    await _setup(hass)
+    with patch(
+        f"custom_components.zha_tools.{action}",
+        AsyncMock(return_value={"device_id": "dev1", "status": STATUS_COMPLETE}),
+    ) as mock:
+        result = await hass.services.async_call(DOMAIN, service, data, blocking=True)
+    assert result is None
+    mock.assert_awaited_once()
+
+
 async def test_reinterview_returns_response(hass):
     await _setup(hass)
     expected = {"device_id": "dev1", "status": STATUS_COMPLETE, "attempts": 1}

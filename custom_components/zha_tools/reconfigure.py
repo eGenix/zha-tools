@@ -41,6 +41,7 @@ from .const import (
     ZHA_MSG_DATA,
     ZHA_MSG_SUCCESS,
 )
+from .helpers import device_label
 
 # Imported as module-level names so tests can patch them on this module.
 from .zha_adapter import async_get_zha_device, async_trigger_reconfigure
@@ -58,8 +59,8 @@ class _ReconfigureCollector:
     shows exactly what ZHA reported back.
     """
 
-    # The device id this collector is reporting for. Set in __init__.
-    device_id: str | None = None
+    # Label of the device this collector is reporting for. Set in __init__.
+    label: str | None = None
     # Per-cluster bind outcomes (True == bound successfully). Set in __init__.
     bind_results: list[bool] | None = None
     # Per-attribute configure-reporting outcomes (True == SUCCESS). Set in
@@ -72,13 +73,13 @@ class _ReconfigureCollector:
     # Whether ZHA emitted its terminal "configuration done" event.
     done: bool = False
 
-    def __init__(self, device_id: str) -> None:
+    def __init__(self, label: str) -> None:
         """Initialise the empty result collections.
 
         Args:
-            device_id: The device the events relate to, used in log messages.
+            label: The device the events relate to, as named in log messages.
         """
-        self.device_id = device_id
+        self.label = label
         self.bind_results = []
         self.report_results = []
         self.failed_binds = []
@@ -102,7 +103,7 @@ class _ReconfigureCollector:
                 self.failed_binds.append(cluster)
             _LOGGER.debug(
                 "ZHA reconfigure of %s: bind of cluster %s %s",
-                self.device_id,
+                self.label,
                 cluster,
                 "succeeded" if success else "FAILED",
             )
@@ -118,7 +119,7 @@ class _ReconfigureCollector:
                 _LOGGER.debug(
                     "ZHA reconfigure of %s: configure-reporting of %s.%s "
                     "reported %s",
-                    self.device_id,
+                    self.label,
                     cluster,
                     attr_name,
                     status,
@@ -126,7 +127,7 @@ class _ReconfigureCollector:
         elif event_type == ZHA_EVENT_CFG_DONE:
             self.done = True
             _LOGGER.debug(
-                "ZHA reconfigure of %s: configuration done", self.device_id
+                "ZHA reconfigure of %s: configuration done", self.label
             )
         # Other event types are not relevant for the outcome and are ignored.
 
@@ -184,23 +185,24 @@ async def _async_reconfigure_once(
     Raises:
         ServiceValidationError: If ``device_id`` is not a known ZHA device.
     """
+    name = device_label(hass, device_id)
     device = async_get_zha_device(hass, device_id)
 
     # A device that is already known to be offline cannot be reconfigured.
     if not device.available:
         _LOGGER.warning(
             "ZHA device %s is not available, reporting %s",
-            device_id,
+            name,
             STATUS_UNAVAILABLE,
         )
         return STATUS_UNAVAILABLE
 
-    collector = _ReconfigureCollector(device_id)
+    collector = _ReconfigureCollector(name)
     unsub = async_dispatcher_connect(
         hass, SIGNAL_DEVICE_RECONFIGURE_EVENT, collector.handle_event
     )
     _LOGGER.debug(
-        "Triggering ZHA reconfigure of %s (timeout %ss)", device_id, timeout
+        "Triggering ZHA reconfigure of %s (timeout %ss)", name, timeout
     )
     try:
         await asyncio.wait_for(async_trigger_reconfigure(device), timeout)
@@ -211,7 +213,7 @@ async def _async_reconfigure_once(
             _LOGGER.warning(
                 "ZHA reconfigure of %s timed out after %ss and the device is "
                 "no longer available, reporting %s (%s)",
-                device_id,
+                name,
                 timeout,
                 STATUS_UNAVAILABLE,
                 collector.summary(),
@@ -220,7 +222,7 @@ async def _async_reconfigure_once(
         _LOGGER.warning(
             "ZHA reconfigure of %s did not finish within %ss, reporting %s "
             "(progress so far: %s)",
-            device_id,
+            name,
             timeout,
             STATUS_TIMEOUT,
             collector.summary(),
@@ -233,7 +235,7 @@ async def _async_reconfigure_once(
         _LOGGER.warning(
             "ZHA reconfigure of %s finished but the device is no longer "
             "available, reporting %s (%s)",
-            device_id,
+            name,
             STATUS_UNAVAILABLE,
             collector.summary(),
         )
@@ -242,7 +244,7 @@ async def _async_reconfigure_once(
     if collector.succeeded:
         _LOGGER.info(
             "ZHA reconfigure of %s finished: %s, reporting %s",
-            device_id,
+            name,
             collector.summary(),
             STATUS_COMPLETE,
         )
@@ -251,7 +253,7 @@ async def _async_reconfigure_once(
     _LOGGER.info(
         "ZHA reconfigure of %s finished without a successful binding and "
         "reporting: %s, reporting %s",
-        device_id,
+        name,
         collector.summary(),
         STATUS_INCOMPLETE,
     )
@@ -284,11 +286,12 @@ async def async_reconfigure_device(
     Raises:
         ServiceValidationError: If ``device_id`` is not a known ZHA device.
     """
+    name = device_label(hass, device_id)
     max_attempts = max_retries + 1
     _LOGGER.info(
         "Reconfiguring ZHA device %s (timeout=%ss, max_retries=%s, "
         "retry_delay=%ss)",
-        device_id,
+        name,
         timeout,
         max_retries,
         retry_delay,
@@ -300,14 +303,14 @@ async def async_reconfigure_device(
         attempts += 1
         _LOGGER.debug(
             "ZHA reconfigure of %s: starting attempt %d of %d",
-            device_id,
+            name,
             attempts,
             max_attempts,
         )
         status = await _async_reconfigure_once(hass, device_id, timeout)
         _LOGGER.info(
             "ZHA reconfigure of %s: attempt %d of %d returned %s",
-            device_id,
+            name,
             attempts,
             max_attempts,
             status,
@@ -316,7 +319,7 @@ async def async_reconfigure_device(
             break
         _LOGGER.debug(
             "ZHA reconfigure of %s: status %s, retrying in %ss",
-            device_id,
+            name,
             status,
             retry_delay,
         )
@@ -325,7 +328,7 @@ async def async_reconfigure_device(
     log = _LOGGER.info if status == STATUS_COMPLETE else _LOGGER.warning
     log(
         "ZHA reconfigure of %s finished after %d attempt(s) with status %s",
-        device_id,
+        name,
         attempts,
         status,
     )

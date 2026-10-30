@@ -9,7 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `zha_tools.frame_counter` action: reads the incoming network (NWK) frame counter the coordinator stores for a device, plus its IEEE address and when it was last seen, to help track down the devices behind rising `NWK_FRAME_COUNTER_FAILURE` counts. Only direct neighbors of the coordinator have such a counter; other devices are reported as `not_neighbor`. Accepts `device_id` or `all_devices`. Needs a Silicon Labs (EZSP version 8 or later) radio.
+- `zha_tools.frame_counter` action: reads the incoming network (NWK) frame counter the coordinator stores for a device, plus its IEEE address and when it was last seen, to help track down the devices behind rising `NWK_FRAME_COUNTER_FAILURE` counts. Only direct neighbors of the coordinator have such a counter; other devices are reported as `not_neighbor`. Accepts `device_id` or `all_devices`. Needs a Silicon Labs (EZSP version 8 or later) radio. The counter is logged as a warning if it is higher than 100, and as an error if it is higher than 1000.
+
+### Changed
+
+- The response of all actions is now optional (`SupportsResponse.OPTIONAL`), so calls without a `response_variable` no longer fail. The documentation now uses `zha_response` as the standard response variable name.
+- Log messages now name devices by their Home Assistant display name, followed by the device id, e.g. on timeouts and errors.
 
 ## [0.4.0] - 2026-09-26
 

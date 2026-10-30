@@ -25,7 +25,7 @@ The helpers recover flaky Zigbee devices on a schedule, or in response to an eve
 | [Frame counter](#frame-counter) | `zha_tools.frame_counter` | Read the network frame counter the coordinator stores for a device, to track down frame counter failures. | Safe |
 | [Rejoin](#rejoin) | `zha_tools.rejoin` | Ask a device to leave and immediately rejoin — a remote substitute for the pairing button. | ⚠️ Dangerous |
 
-All five actions report a status back to the caller and use `SupportsResponse.ONLY`, so a call **must** capture the response with `response_variable` (see [Troubleshooting](#troubleshooting)).
+All five actions report a status back to the caller. Capturing that response is optional; the examples in this document use `zha_response` as the standard name for the response variable (see [Response variable](#response-variable)).
 
 Reconfigure, re-interview, ping and frame counter also run on [all devices](#running-on-all-devices) at once, instead of on a single one.
 
@@ -84,7 +84,7 @@ Each of these defaults can be overridden on a per-call basis by passing the corr
 
 ### Response
 
-The action uses `SupportsResponse.ONLY`, which means it **only** returns response data. Automations **must** capture the result with `response_variable`, and any blocking caller must request the response (for example, `return_response: true`).
+The action returns response data, which automations and scripts capture with `response_variable` (by convention `zha_response`). Capturing it is optional: a call without `response_variable` still runs the action, it just discards the result.
 
 The response is a mapping with the following keys:
 
@@ -112,20 +112,20 @@ actions:
       timeout: 15
       max_retries: 5
       retry_delay: 10
-    response_variable: result
+    response_variable: zha_response
   - if:
       - condition: template
-        value_template: "{{ result.status == 'complete' }}"
+        value_template: "{{ zha_response.status == 'complete' }}"
     then:
       - action: notify.mobile_app_phone
         data:
           title: ZHA Tools
-          message: "Device reconfigured successfully after {{ result.attempts }} attempt(s)."
+          message: "Device reconfigured successfully after {{ zha_response.attempts }} attempt(s)."
     else:
       - action: notify.mobile_app_phone
         data:
           title: ZHA Tools reconfigure failed
-          message: "Reconfigure ended with status '{{ result.status }}' after {{ result.attempts }} attempt(s)."
+          message: "Reconfigure ended with status '{{ zha_response.status }}' after {{ zha_response.attempts }} attempt(s)."
 ```
 
 ### Example: script / Developer Tools
@@ -137,11 +137,11 @@ sequence:
   - action: zha_tools.reconfigure
     data:
       device_id: 1234567890abcdef1234567890abcdef
-    response_variable: result
+    response_variable: zha_response
   - action: system_log.write
     data:
       level: info
-      message: "Reconfigure status={{ result.status }} attempts={{ result.attempts }}"
+      message: "Reconfigure status={{ zha_response.status }} attempts={{ zha_response.attempts }}"
 ```
 
 In **Developer Tools -> Actions**, select `zha_tools.reconfigure`, pick the device, and enable "return response" to see the `device_id`, `status`, and `attempts` returned by the call.
@@ -150,22 +150,18 @@ In **Developer Tools -> Actions**, select `zha_tools.reconfigure`, pick the devi
 
 When the action is called, it triggers a ZHA device reconfigure for the selected device and watches ZHA's progress events for the device — in particular the binding and configure-reporting steps. Based on those events it decides the outcome: `complete` when at least one binding and at least one reporting step succeeded, `incomplete` when the run finished without that minimum success, `timeout` when an attempt did not finish in time, and `unavailable` when the device did not respond. If the result is anything other than `complete`, the action waits `retry_delay` seconds and tries again, up to `max_retries` additional attempts, then returns the final status and the number of attempts made.
 
-### Troubleshooting
+### Response variable
 
-#### `Script requires 'response_variable' for response data for service call zha_tools.reconfigure`
-
-This is expected, not a bug. The action is a [response-only](https://www.home-assistant.io/docs/scripts/service-calls/#use-templates-to-handle-response-data) action (`SupportsResponse.ONLY`): its sole job is to return the reconfigure result, so Home Assistant refuses to run it unless the caller captures that result. You called it without capturing the response.
-
-Add `response_variable` to the action:
+Home Assistant leaves the name of the response variable to the caller; an action cannot set one itself. All examples in this document use `zha_response`, and we recommend using that name in your own automations and scripts as well, so they read the same way across all ZHA Tools actions:
 
 ```yaml
   - action: zha_tools.reconfigure
     data:
       device_id: 1234567890abcdef1234567890abcdef
-    response_variable: result        # <-- required
+    response_variable: zha_response
 ```
 
-From **Developer Tools -> Actions**, enable the **Return response** toggle for the same reason. See [Response](#response) above for the keys returned in `result`. The same applies to the `reinterview`, `ping`, `frame_counter` and `rejoin` actions below.
+The response is optional (`SupportsResponse.OPTIONAL`): without `response_variable` the action still runs, and its outcome only shows up in the log. From **Developer Tools -> Actions**, enable the **Return response** toggle to see the result. See [Response](#response) above for the keys returned in `zha_response`. The same applies to the `reinterview`, `ping`, `frame_counter` and `rejoin` actions below.
 
 ## Re-interview
 
@@ -191,7 +187,7 @@ The response is a mapping with `device_id`, `status` — one of `complete` (the 
 - action: zha_tools.reinterview
   data:
     device_id: 1234567890abcdef1234567890abcdef
-  response_variable: result
+  response_variable: zha_response
 ```
 
 ## Ping
@@ -232,10 +228,10 @@ Try hard to win back a device that ZHA has marked unavailable, then restore its 
     timeout: 30
     max_retries: 20
     retry_delay: 60
-  response_variable: result
+  response_variable: zha_response
 - if:
     - condition: template
-      value_template: "{{ result.status == 'complete' }}"
+      value_template: "{{ zha_response.status == 'complete' }}"
   then:
     - action: zha_tools.reconfigure
       data:
@@ -275,6 +271,8 @@ The response is a mapping with:
 - `frame_counter` (integer or `null`) — the highest frame counter the coordinator has accepted from the device; `null` for `not_neighbor`.
 - `last_seen` (string or `null`) — when the coordinator last heard from the device, as an ISO 8601 UTC timestamp.
 
+Each counter read is also written to the Home Assistant log: at info level normally, as a **warning** if the counter is higher than 100, and as an **error** if it is higher than 1000.
+
 An unexpected error, such as an unsupported radio, is **not** swallowed: it propagates to the caller rather than being reported as a status. In an [all-devices](#running-on-all-devices) run, `not_neighbor` devices count as `failed`; filter on `status == 'complete'` to get the neighbors.
 
 ### Example
@@ -289,12 +287,12 @@ actions:
   - action: zha_tools.frame_counter
     data:
       all_devices: true
-    response_variable: result
+    response_variable: zha_response
   - action: logbook.log
     data:
       name: ZHA frame counters
       message: >-
-        {% for d in result.devices | selectattr('status', 'eq', 'complete') %}
+        {% for d in zha_response.devices | selectattr('status', 'eq', 'complete') %}
         {{ d.ieee }}: {{ d.frame_counter }} (last seen {{ d.last_seen }});
         {% endfor %}
 ```
@@ -307,7 +305,7 @@ actions:
 - action: zha_tools.reconfigure
   data:
     all_devices: true
-  response_variable: result
+  response_variable: zha_response
 ```
 
 What happens:
@@ -341,17 +339,17 @@ For example, to notify only when something did not work out:
   data:
     all_devices: true
     max_retries: 2
-  response_variable: result
+  response_variable: zha_response
 - if:
     - condition: template
-      value_template: "{{ result.failed > 0 }}"
+      value_template: "{{ zha_response.failed > 0 }}"
   then:
     - action: notify.mobile_app_phone
       data:
         title: ZHA Tools
         message: >-
-          {{ result.failed }} of {{ result.total }} devices did not complete:
-          {{ result.devices | rejectattr('status', 'eq', 'complete')
+          {{ zha_response.failed }} of {{ zha_response.total }} devices did not complete:
+          {{ zha_response.devices | rejectattr('status', 'eq', 'complete')
              | map(attribute='device_id') | join(', ') }}
 ```
 
@@ -388,7 +386,7 @@ Because a rejoin cannot be confirmed reliably, treat `requested` as "asked, outc
     device_id: 1234567890abcdef1234567890abcdef
     confirm: true            # required; the action refuses to run without it
     rejoin_wait: 60
-  response_variable: result
+  response_variable: zha_response
 ```
 
 ## Development

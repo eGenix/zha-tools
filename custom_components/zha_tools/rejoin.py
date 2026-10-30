@@ -28,6 +28,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 
 from .const import STATUS_COMPLETE, STATUS_REQUESTED, STATUS_UNAVAILABLE
+from .helpers import device_label
 
 # Imported as module-level names so tests can patch them on this module.
 from .zha_adapter import async_get_zha_device, async_trigger_rejoin
@@ -71,6 +72,7 @@ async def async_rejoin_device(
             "re-pair."
         )
 
+    name = device_label(hass, device_id)
     device = async_get_zha_device(hass, device_id)
 
     # A leave request can only be delivered to a device that is currently on the
@@ -79,7 +81,7 @@ async def async_rejoin_device(
         _LOGGER.warning(
             "ZHA device %s is not available; not sending a leave-with-rejoin, "
             "reporting %s",
-            device_id,
+            name,
             STATUS_UNAVAILABLE,
         )
         return {"device_id": device_id, "status": STATUS_UNAVAILABLE}
@@ -88,7 +90,7 @@ async def async_rejoin_device(
         "Sending leave-with-rejoin to ZHA device %s. If the device firmware "
         "ignores the rejoin flag it will leave the network and not return, "
         "requiring a manual re-pair.",
-        device_id,
+        name,
     )
     await async_trigger_rejoin(device)
 
@@ -96,17 +98,17 @@ async def async_rejoin_device(
         _LOGGER.info(
             "Leave-with-rejoin sent to %s; not waiting for it to return, "
             "reporting %s",
-            device_id,
+            name,
             STATUS_REQUESTED,
         )
         return {"device_id": device_id, "status": STATUS_REQUESTED}
 
-    _LOGGER.debug("Waiting up to %ss for %s to rejoin", rejoin_wait, device_id)
+    _LOGGER.debug("Waiting up to %ss for %s to rejoin", rejoin_wait, name)
     await asyncio.sleep(rejoin_wait)
     if device.available:
         _LOGGER.info(
             "ZHA device %s is reachable again after the rejoin, reporting %s",
-            device_id,
+            name,
             STATUS_COMPLETE,
         )
         return {"device_id": device_id, "status": STATUS_COMPLETE}
@@ -114,7 +116,7 @@ async def async_rejoin_device(
     _LOGGER.warning(
         "ZHA device %s has not returned within %ss; it may still be rejoining or "
         "may need a manual re-pair, reporting %s",
-        device_id,
+        name,
         rejoin_wait,
         STATUS_REQUESTED,
     )

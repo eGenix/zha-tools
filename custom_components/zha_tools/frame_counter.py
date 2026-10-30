@@ -14,9 +14,11 @@ typically because it reset its own outgoing counter, e.g. after a power cut or
 firmware update.
 
 The read only queries the coordinator's radio; nothing is sent over the air.
-It is a single, quick read, so it is not retried. Errors raised by the
-underlying calls are not caught and mapped to a status -- they propagate so the
-caller sees the real failure.
+It is a single, quick read, so it is not retried. The counter is logged as a
+warning above ``FRAME_COUNTER_WARNING_THRESHOLD`` and as an error above
+``FRAME_COUNTER_ERROR_THRESHOLD``, so high counters stand out in the log.
+Errors raised by the underlying calls are not caught and mapped to a status --
+they propagate so the caller sees the real failure.
 """
 
 from __future__ import annotations
@@ -26,7 +28,13 @@ from datetime import UTC, datetime
 
 from homeassistant.core import HomeAssistant
 
-from .const import STATUS_COMPLETE, STATUS_NOT_NEIGHBOR
+from .const import (
+    FRAME_COUNTER_ERROR_THRESHOLD,
+    FRAME_COUNTER_WARNING_THRESHOLD,
+    STATUS_COMPLETE,
+    STATUS_NOT_NEIGHBOR,
+)
+from .helpers import device_label
 
 # Imported as module-level names so tests can patch them on this module.
 from .zha_adapter import async_get_neighbor_frame_counter, async_get_zha_device
@@ -52,6 +60,7 @@ async def async_read_frame_counter(hass: HomeAssistant, device_id: str) -> dict:
         ServiceValidationError: If ``device_id`` is not a known ZHA device.
         HomeAssistantError: If the radio cannot report frame counters.
     """
+    name = device_label(hass, device_id)
     device = async_get_zha_device(hass, device_id)
     frame_counter = await async_get_neighbor_frame_counter(device)
     last_seen = (
@@ -65,15 +74,21 @@ async def async_read_frame_counter(hass: HomeAssistant, device_id: str) -> dict:
         _LOGGER.info(
             "ZHA device %s (%s) is not a neighbor of the coordinator; no frame "
             "counter stored, reporting %s",
-            device_id,
+            name,
             device.ieee,
             status,
         )
     else:
         status = STATUS_COMPLETE
-        _LOGGER.info(
+        if frame_counter > FRAME_COUNTER_ERROR_THRESHOLD:
+            log = _LOGGER.error
+        elif frame_counter > FRAME_COUNTER_WARNING_THRESHOLD:
+            log = _LOGGER.warning
+        else:
+            log = _LOGGER.info
+        log(
             "ZHA device %s (%s): incoming NWK frame counter %d, last seen %s",
-            device_id,
+            name,
             device.ieee,
             frame_counter,
             last_seen,

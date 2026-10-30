@@ -23,6 +23,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 
 from .const import DATA_BATCH_RUNNING, DOMAIN, STATUS_COMPLETE, STATUS_ERROR
+from .helpers import device_label
 
 # Imported as a module-level name so tests can patch it on this module.
 from .zha_adapter import async_get_zha_device_ids
@@ -109,12 +110,13 @@ async def async_run_on_all_devices(
 
         results = []
         for number, device_id in enumerate(device_ids, start=1):
+            name = device_label(hass, device_id)
             _LOGGER.info(
                 "Batched %s: device %d of %d (%s)",
                 action_name,
                 number,
                 total,
-                device_id,
+                name,
             )
             try:
                 result = await action(hass, device_id, **params)
@@ -126,7 +128,7 @@ async def async_run_on_all_devices(
                 _LOGGER.exception(
                     "Batched %s: device %s (%d of %d) raised an error",
                     action_name,
-                    device_id,
+                    name,
                     number,
                     total,
                 )
