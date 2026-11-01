@@ -94,7 +94,12 @@ async def test_complete_when_bind_and_report_succeed(hass):
     device = SimpleNamespace(available=True)
     trigger = _make_trigger(hass, [_bind(True), _report("SUCCESS"), _done()])
     result = await _run(hass, device, trigger)
-    assert result == {"device_id": "dev1", "status": STATUS_COMPLETE, "attempts": 1}
+    assert result == {
+        "device_id": "dev1",
+        "device_name": None,
+        "status": STATUS_COMPLETE,
+        "attempts": 1,
+    }
 
 
 async def test_incomplete_when_reporting_fails(hass):
@@ -259,3 +264,43 @@ async def test_logs_zha_reporting_and_outcome(hass, caplog):
     # The outcome summary names the failing step and the reported status.
     assert "failed reporting: OnOff.on_off" in caplog.text
     assert "incomplete" in caplog.text
+
+
+async def test_concurrent_reconfigures_do_not_mix_their_events(hass):
+    """ZHA's events carry no device id, so our reconfigures run one at a time.
+
+    The first device reports a failed reporting step slowly; the second one a
+    successful run. Running in parallel, the second run would collect the first
+    device's events too (and vice versa).
+    """
+    good = SimpleNamespace(available=True)
+    bad = SimpleNamespace(available=True)
+    triggers = {
+        id(bad): _make_trigger(
+            hass, [_bind(True), _report("FAILURE"), _done()], sleep=0.05
+        ),
+        id(good): _make_trigger(hass, [_bind(True), _report("SUCCESS"), _done()]),
+    }
+    devices = {"bad": bad, "good": good}
+
+    async def trigger(device):
+        await triggers[id(device)](device)
+
+    params = {"timeout": 5, "max_retries": 0, "retry_delay": 0}
+    with (
+        patch(
+            "custom_components.zha_tools.reconfigure.async_get_zha_device",
+            side_effect=lambda hass_, device_id: devices[device_id],
+        ),
+        patch(
+            "custom_components.zha_tools.reconfigure.async_trigger_reconfigure",
+            new=trigger,
+        ),
+    ):
+        bad_result, good_result = await asyncio.gather(
+            async_reconfigure_device(hass, "bad", **params),
+            async_reconfigure_device(hass, "good", **params),
+        )
+
+    assert bad_result["status"] == STATUS_INCOMPLETE
+    assert good_result["status"] == STATUS_COMPLETE

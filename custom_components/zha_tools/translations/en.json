@@ -117,6 +117,58 @@
         }
       }
     },
+    "query_route": {
+      "name": "Query ZHA device route",
+      "description": "Report everything the coordinator knows about the route between it and a ZHA device, naming each hop by its network (NWK) address and display name: the path of the device's last route record, the radio's source route and route table entry, the path rebuilt from the last topology scan, the device's parents and the routers that hear it. Nothing is sent over the air. Radio tables are only read from Silicon Labs (EZSP) radios. Works on a single device, or on all ZHA devices except the coordinator.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The ZHA device to query the route for. Required unless All devices is turned on."
+        },
+        "all_devices": {
+          "name": "All devices",
+          "description": "Query the route of every ZHA device except the coordinator. Cannot be combined with a device, and only one batched run can be in progress at a time."
+        }
+      }
+    },
+    "retry_action": {
+      "name": "Call action reliably",
+      "description": "Call another action, e.g. climate.set_temperature or cover.close_cover, and keep repeating it until it goes through or the timeout runs out, waiting longer after each failed attempt (slow exponential backoff). For ZHA entities an attempt succeeds once the device has acknowledged the command; while a targeted entity is unavailable, the action is not called and the attempt counts as failed. Only wrap actions that can safely run more than once (set a value, not toggle it). Invalid calls and ZHA Tools actions are not retried.",
+      "fields": {
+        "action": {
+          "name": "Action",
+          "description": "The action to call, as domain.action."
+        },
+        "target": {
+          "name": "Target",
+          "description": "The target of the action (entity_id, device_id, area_id), as for a regular action call."
+        },
+        "data": {
+          "name": "Data",
+          "description": "The data for the action, as for a regular action call."
+        },
+        "timeout": {
+          "name": "Timeout",
+          "description": "Overall time limit in seconds for all attempts and the waits between them."
+        },
+        "attempt_timeout": {
+          "name": "Attempt timeout",
+          "description": "Time limit in seconds for a single attempt."
+        },
+        "retry_delay": {
+          "name": "Initial retry delay",
+          "description": "Seconds to wait after the first failed attempt."
+        },
+        "backoff": {
+          "name": "Backoff factor",
+          "description": "Factor the delay is multiplied by after each failed attempt. 1 keeps the delay constant; 1.5 gives a slow exponential backoff."
+        },
+        "max_delay": {
+          "name": "Maximum retry delay",
+          "description": "Upper limit in seconds for the delay between attempts."
+        }
+      }
+    },
     "rejoin": {
       "name": "DANGER: rejoin ZHA device",
       "description": "Ask a ZHA device to leave the network and immediately rejoin it (a remote substitute for the pairing button). DANGER: if the device firmware ignores the rejoin flag it will leave and not return, needing a manual re-pair. Prefer Re-interview unless a full rejoin is truly needed.",

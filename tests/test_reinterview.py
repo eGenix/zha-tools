@@ -52,7 +52,12 @@ async def test_complete_when_reinterview_finishes(hass):
         return None
 
     result = await _run(hass, device, trigger)
-    assert result == {"device_id": "dev1", "status": STATUS_COMPLETE, "attempts": 1}
+    assert result == {
+        "device_id": "dev1",
+        "device_name": None,
+        "status": STATUS_COMPLETE,
+        "attempts": 1,
+    }
 
 
 async def test_unavailable_when_device_offline_upfront(hass):
@@ -129,3 +134,14 @@ async def test_unknown_device_raises(hass):
             await async_reinterview_device(
                 hass, "bad", timeout=1, max_retries=0, retry_delay=0
             )
+
+
+async def test_adapter_refuses_without_in_place_reinterview():
+    """Older ZHA versions have no in-place re-interview; say so clearly."""
+    from homeassistant.exceptions import HomeAssistantError
+
+    from custom_components.zha_tools import zha_adapter
+
+    device = SimpleNamespace(ieee="00:11", gateway=SimpleNamespace())
+    with pytest.raises(HomeAssistantError, match="update Home Assistant"):
+        await zha_adapter.async_trigger_reinterview(device)

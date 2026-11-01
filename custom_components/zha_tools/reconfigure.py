@@ -24,6 +24,8 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
 from .const import (
+    DATA_RECONFIGURE_LOCK,
+    DOMAIN,
     SIGNAL_DEVICE_RECONFIGURE_EVENT,
     STATUS_COMPLETE,
     STATUS_INCOMPLETE,
@@ -41,7 +43,7 @@ from .const import (
     ZHA_MSG_DATA,
     ZHA_MSG_SUCCESS,
 )
-from .helpers import device_label
+from .helpers import device_label, device_name
 
 # Imported as module-level names so tests can patch them on this module.
 from .zha_adapter import async_get_zha_device, async_trigger_reconfigure
@@ -197,6 +199,34 @@ async def _async_reconfigure_once(
         )
         return STATUS_UNAVAILABLE
 
+    # ZHA's progress events do not say which device they belong to, so two
+    # reconfigures running at once would mix up their results. Ours therefore
+    # run one at a time (a reconfigure started from the ZHA UI meanwhile still
+    # gets mixed in).
+    async with _reconfigure_lock(hass):
+        return await _async_run_reconfigure(name, device, timeout, hass)
+
+
+def _reconfigure_lock(hass: HomeAssistant) -> asyncio.Lock:
+    """Return the lock which serializes this integration's reconfigures."""
+    data = hass.data.setdefault(DOMAIN, {})
+    return data.setdefault(DATA_RECONFIGURE_LOCK, asyncio.Lock())
+
+
+async def _async_run_reconfigure(
+    name: str, device: object, timeout: float, hass: HomeAssistant
+) -> str:
+    """Trigger a reconfigure and map ZHA's progress events to a status.
+
+    Args:
+        name: The device label used in log messages.
+        device: The ZHA device object to reconfigure.
+        timeout: Maximum number of seconds to wait for the attempt to finish.
+        hass: The Home Assistant instance.
+
+    Returns:
+        One of the ``STATUS_*`` constants describing the outcome.
+    """
     collector = _ReconfigureCollector(name)
     unsub = async_dispatcher_connect(
         hass, SIGNAL_DEVICE_RECONFIGURE_EVENT, collector.handle_event
@@ -281,7 +311,9 @@ async def async_reconfigure_device(
         retry_delay: Seconds to wait between attempts.
 
     Returns:
-        A mapping with the final ``status`` and the number of ``attempts`` made.
+        A mapping with ``device_id``, the device's display name in
+        ``device_name``, the final ``status`` and the number of ``attempts``
+        made.
 
     Raises:
         ServiceValidationError: If ``device_id`` is not a known ZHA device.
@@ -332,4 +364,9 @@ async def async_reconfigure_device(
         attempts,
         status,
     )
-    return {"device_id": device_id, "status": status, "attempts": attempts}
+    return {
+        "device_id": device_id,
+        "device_name": device_name(hass, device_id),
+        "status": status,
+        "attempts": attempts,
+    }

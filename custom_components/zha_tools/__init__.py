@@ -9,11 +9,15 @@ Provides a small collection of ZHA helper actions that automations can call:
 * ``zha_tools.ping`` -- check that a device answers, with retries, which also
   brings back devices ZHA has given up on;
 * ``zha_tools.frame_counter`` -- read the incoming network frame counter the
-  coordinator stores for a device, to track down frame counter failures.
+  coordinator stores for a device, to track down frame counter failures;
+* ``zha_tools.query_route`` -- report the known routes between the coordinator
+  and a device, with each hop named;
+* ``zha_tools.retry_action`` -- call any action, e.g. ``cover.close_cover``,
+  repeatedly with a slow exponential backoff until it goes through.
 
-Each action returns the resulting status to the caller. Reconfigure,
-re-interview, ping and frame counter can either work on a single ``device_id`` or, with
-``all_devices: true``, on every ZHA device except the coordinator.
+Each action returns the resulting status to the caller. All device actions
+except rejoin can either work on a single ``device_id`` or, with ``all_devices: true``,
+on every ZHA device except the coordinator.
 """
 
 from __future__ import annotations
@@ -31,32 +35,48 @@ from homeassistant.core import (
 )
 from homeassistant.exceptions import ServiceValidationError
 import homeassistant.helpers.config_validation as cv
+from homeassistant.helpers.service import async_register_admin_service
 
 from .batch import DeviceAction, async_run_on_all_devices
 from .const import (
     ATTR_DEVICE_ID,
+    CONF_ACTION,
     CONF_ALL_DEVICES,
+    CONF_ATTEMPT_TIMEOUT,
+    CONF_BACKOFF,
     CONF_CONFIRM,
+    CONF_DATA,
+    CONF_MAX_DELAY,
     CONF_MAX_RETRIES,
     CONF_REJOIN_WAIT,
     CONF_RETRY_DELAY,
+    CONF_TARGET,
     CONF_TIMEOUT,
     DEFAULT_MAX_RETRIES,
     DEFAULT_REJOIN_WAIT,
+    DEFAULT_RETRY_ACTION_ATTEMPT_TIMEOUT,
+    DEFAULT_RETRY_ACTION_BACKOFF,
+    DEFAULT_RETRY_ACTION_DELAY,
+    DEFAULT_RETRY_ACTION_MAX_DELAY,
+    DEFAULT_RETRY_ACTION_TIMEOUT,
     DEFAULT_RETRY_DELAY,
     DEFAULT_TIMEOUT,
     DOMAIN,
     SERVICE_FRAME_COUNTER,
     SERVICE_PING,
+    SERVICE_QUERY_ROUTE,
     SERVICE_RECONFIGURE,
     SERVICE_REINTERVIEW,
     SERVICE_REJOIN,
+    SERVICE_RETRY_ACTION,
 )
 from .frame_counter import async_read_frame_counter
 from .ping import async_ping_device
 from .reconfigure import async_reconfigure_device
 from .reinterview import async_reinterview_device
 from .rejoin import async_rejoin_device
+from .retry_action import async_retry_action
+from .route import async_query_route
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -71,19 +91,26 @@ _RETRY_SCHEMA = vol.Schema(
         {
             vol.Exclusive(ATTR_DEVICE_ID, "target"): cv.string,
             vol.Exclusive(CONF_ALL_DEVICES, "target"): cv.boolean,
-            vol.Optional(CONF_TIMEOUT): vol.All(vol.Coerce(float), vol.Range(min=1)),
-            vol.Optional(CONF_MAX_RETRIES): vol.All(vol.Coerce(int), vol.Range(min=0)),
+            # Bounded like the options flow (which also rejects "inf"), so a
+            # call cannot retry forever.
+            vol.Optional(CONF_TIMEOUT): vol.All(
+                vol.Coerce(float), vol.Range(min=1, max=300)
+            ),
+            vol.Optional(CONF_MAX_RETRIES): vol.All(
+                vol.Coerce(int), vol.Range(min=0, max=100)
+            ),
             vol.Optional(CONF_RETRY_DELAY): vol.All(
-                vol.Coerce(float), vol.Range(min=0)
+                vol.Coerce(float), vol.Range(min=0, max=300)
             ),
         },
         cv.has_at_least_one_key(ATTR_DEVICE_ID, CONF_ALL_DEVICES),
     )
 )
 
-# The frame counter read is a single, quick query of the coordinator's radio, so
-# it takes the same target as the retried actions but no retry parameters.
-_FRAME_COUNTER_SCHEMA = vol.Schema(
+# The frame counter read and the route query are single, quick reads of the
+# coordinator's state, so they take the same target as the retried actions but
+# no retry parameters.
+_QUERY_SCHEMA = vol.Schema(
     vol.All(
         {
             vol.Exclusive(ATTR_DEVICE_ID, "target"): cv.string,
@@ -99,7 +126,38 @@ REJOIN_SCHEMA = vol.Schema(
     {
         vol.Required(ATTR_DEVICE_ID): cv.string,
         vol.Required(CONF_CONFIRM): cv.boolean,
-        vol.Optional(CONF_REJOIN_WAIT): vol.All(vol.Coerce(float), vol.Range(min=0)),
+        vol.Optional(CONF_REJOIN_WAIT): vol.All(
+            vol.Coerce(float), vol.Range(min=0, max=600)
+        ),
+    }
+)
+
+# The reliable action wrapper has its own timing parameters, with defaults
+# suited to keep trying for a long time while slowing down.
+RETRY_ACTION_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_ACTION): cv.service,
+        vol.Optional(CONF_DATA, default=dict): dict,
+        vol.Optional(CONF_TARGET, default=dict): vol.Schema(
+            cv.TARGET_SERVICE_FIELDS
+        ),
+        # All timing values are bounded (which also rejects "inf"), so a call
+        # cannot keep retrying forever or flood the network with attempts.
+        vol.Optional(CONF_TIMEOUT, default=DEFAULT_RETRY_ACTION_TIMEOUT): vol.All(
+            vol.Coerce(float), vol.Range(min=1, max=86400)
+        ),
+        vol.Optional(
+            CONF_ATTEMPT_TIMEOUT, default=DEFAULT_RETRY_ACTION_ATTEMPT_TIMEOUT
+        ): vol.All(vol.Coerce(float), vol.Range(min=1, max=600)),
+        vol.Optional(CONF_RETRY_DELAY, default=DEFAULT_RETRY_ACTION_DELAY): vol.All(
+            vol.Coerce(float), vol.Range(min=1, max=3600)
+        ),
+        vol.Optional(CONF_BACKOFF, default=DEFAULT_RETRY_ACTION_BACKOFF): vol.All(
+            vol.Coerce(float), vol.Range(min=1, max=10)
+        ),
+        vol.Optional(CONF_MAX_DELAY, default=DEFAULT_RETRY_ACTION_MAX_DELAY): vol.All(
+            vol.Coerce(float), vol.Range(min=1, max=3600)
+        ),
     }
 )
 
@@ -188,15 +246,69 @@ async def _async_handle_retry_action(
     return result
 
 
+async def _async_handle_query_action(
+    hass: HomeAssistant,
+    call: ServiceCall,
+    service: str,
+    action: DeviceAction,
+) -> ServiceResponse:
+    """Run a non-retried, read-only action for a service call.
+
+    Frame counter and route query only differ in the action they run, so they
+    share this handler body: it runs the action on the single requested device
+    or, for ``all_devices: true``, on every ZHA device except the coordinator.
+
+    Args:
+        hass: The Home Assistant instance.
+        call: The service call being handled.
+        service: The service name, used in log and error messages.
+        action: The single-device coroutine function to run, called as
+            ``action(hass, device_id)``.
+
+    Returns:
+        The single-device result, or the batch result for an all-devices run.
+
+    Raises:
+        ServiceValidationError: If the call names no device to work on, or if
+            another batched run is already in progress.
+    """
+    all_devices = call.data.get(CONF_ALL_DEVICES, False)
+    device_id = call.data.get(ATTR_DEVICE_ID)
+    _LOGGER.debug(
+        "Service %s.%s called for %s",
+        DOMAIN,
+        service,
+        "all devices" if all_devices else f"device {device_id}",
+    )
+    if all_devices:
+        result = await async_run_on_all_devices(hass, action, service)
+    elif device_id:
+        result = await action(hass, device_id)
+    else:
+        raise ServiceValidationError(
+            f"{DOMAIN}.{service} needs either a device_id or all_devices set "
+            f"to true"
+        )
+    # Only the status is logged: the result may hold values which must not end
+    # up in the log, such as frame counters. The actions log their own results.
+    _LOGGER.debug(
+        "Service %s.%s returning status %s",
+        DOMAIN,
+        service,
+        result.get("status", f"{result.get('complete')}/{result.get('total')}"),
+    )
+    return result
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up ZHA Tools from a config entry.
 
-    Registers the ``reconfigure``, ``reinterview``, ``rejoin``, ``ping`` and
-    ``frame_counter`` actions. The single config entry's options supply the
-    default timeout and retry behaviour shared by reconfigure, re-interview and
-    ping; each can be overridden per call. Those three and frame counter also
-    accept ``all_devices: true`` instead of a ``device_id``, to work through
-    every ZHA device except the coordinator.
+    Registers the ``reconfigure``, ``reinterview``, ``rejoin``, ``ping``,
+    ``frame_counter``, ``query_route`` and ``retry_action`` actions. The single
+    config entry's options supply the default timeout and retry behaviour shared
+    by reconfigure, re-interview and ping; each can be overridden per call. All
+    device actions except rejoin also accept ``all_devices: true`` instead of a
+    ``device_id``, to work through every ZHA device except the coordinator.
 
     Args:
         hass: The Home Assistant instance.
@@ -226,27 +338,48 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     async def handle_frame_counter(call: ServiceCall) -> ServiceResponse:
         """Handle a frame counter call and return the counter(s) read."""
-        all_devices = call.data.get(CONF_ALL_DEVICES, False)
-        device_id = call.data.get(ATTR_DEVICE_ID)
-        _LOGGER.debug(
-            "Service %s.%s called for %s",
-            DOMAIN,
-            SERVICE_FRAME_COUNTER,
-            "all devices" if all_devices else f"device {device_id}",
+        return await _async_handle_query_action(
+            hass, call, SERVICE_FRAME_COUNTER, async_read_frame_counter
         )
-        if all_devices:
-            result = await async_run_on_all_devices(
-                hass, async_read_frame_counter, SERVICE_FRAME_COUNTER
-            )
-        elif device_id:
-            result = await async_read_frame_counter(hass, device_id)
-        else:
-            raise ServiceValidationError(
-                f"{DOMAIN}.{SERVICE_FRAME_COUNTER} needs either a device_id or "
-                f"all_devices set to true"
-            )
+
+    async def handle_query_route(call: ServiceCall) -> ServiceResponse:
+        """Handle a route query call and return the route report(s)."""
+        return await _async_handle_query_action(
+            hass, call, SERVICE_QUERY_ROUTE, async_query_route
+        )
+
+    async def handle_retry_action(call: ServiceCall) -> ServiceResponse:
+        """Handle a reliable action call and return its outcome."""
+        # The wrapped action's data may hold secrets (e.g. lock codes), so
+        # only its keys are logged.
         _LOGGER.debug(
-            "Service %s.%s returning %s", DOMAIN, SERVICE_FRAME_COUNTER, result
+            "Service %s.%s called for %s (target=%s, data keys=%s, timeout=%s, "
+            "attempt_timeout=%s, retry_delay=%s, backoff=%s, max_delay=%s)",
+            DOMAIN,
+            SERVICE_RETRY_ACTION,
+            call.data[CONF_ACTION],
+            call.data[CONF_TARGET],
+            sorted(call.data[CONF_DATA]),
+            call.data[CONF_TIMEOUT],
+            call.data[CONF_ATTEMPT_TIMEOUT],
+            call.data[CONF_RETRY_DELAY],
+            call.data[CONF_BACKOFF],
+            call.data[CONF_MAX_DELAY],
+        )
+        result = await async_retry_action(
+            hass,
+            call.data[CONF_ACTION],
+            call.data[CONF_DATA],
+            call.data[CONF_TARGET],
+            timeout=call.data[CONF_TIMEOUT],
+            attempt_timeout=call.data[CONF_ATTEMPT_TIMEOUT],
+            retry_delay=call.data[CONF_RETRY_DELAY],
+            backoff=call.data[CONF_BACKOFF],
+            max_delay=call.data[CONF_MAX_DELAY],
+            context=call.context,
+        )
+        _LOGGER.debug(
+            "Service %s.%s returning %s", DOMAIN, SERVICE_RETRY_ACTION, result
         )
         return result
 
@@ -275,35 +408,60 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
         return result
 
-    hass.services.async_register(
+    # The device maintenance actions can disturb or reshape the Zigbee network
+    # (rejoin even removes a device), and the read-only ones expose the network
+    # layout, so only administrators may call them. Automations and scripts run
+    # without a user and are not affected. retry_action is not restricted: the
+    # wrapped action runs with the caller's own permissions.
+    async_register_admin_service(
+        hass,
         DOMAIN,
         SERVICE_RECONFIGURE,
         handle_reconfigure,
         schema=_RETRY_SCHEMA,
         supports_response=SupportsResponse.OPTIONAL,
     )
-    hass.services.async_register(
+    async_register_admin_service(
+        hass,
         DOMAIN,
         SERVICE_REINTERVIEW,
         handle_reinterview,
         schema=_RETRY_SCHEMA,
         supports_response=SupportsResponse.OPTIONAL,
     )
-    hass.services.async_register(
+    async_register_admin_service(
+        hass,
         DOMAIN,
         SERVICE_PING,
         handle_ping,
         schema=_RETRY_SCHEMA,
         supports_response=SupportsResponse.OPTIONAL,
     )
-    hass.services.async_register(
+    async_register_admin_service(
+        hass,
         DOMAIN,
         SERVICE_FRAME_COUNTER,
         handle_frame_counter,
-        schema=_FRAME_COUNTER_SCHEMA,
+        schema=_QUERY_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    async_register_admin_service(
+        hass,
+        DOMAIN,
+        SERVICE_QUERY_ROUTE,
+        handle_query_route,
+        schema=_QUERY_SCHEMA,
         supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
+        DOMAIN,
+        SERVICE_RETRY_ACTION,
+        handle_retry_action,
+        schema=RETRY_ACTION_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    async_register_admin_service(
+        hass,
         DOMAIN,
         SERVICE_REJOIN,
         handle_rejoin,
@@ -311,13 +469,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         supports_response=SupportsResponse.OPTIONAL,
     )
     _LOGGER.debug(
-        "Registered %s actions: %s, %s, %s, %s, %s",
+        "Registered %s actions: %s, %s, %s, %s, %s, %s, %s",
         DOMAIN,
         SERVICE_RECONFIGURE,
         SERVICE_REINTERVIEW,
         SERVICE_REJOIN,
         SERVICE_PING,
         SERVICE_FRAME_COUNTER,
+        SERVICE_QUERY_ROUTE,
+        SERVICE_RETRY_ACTION,
     )
     return True
 
@@ -338,6 +498,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         SERVICE_REJOIN,
         SERVICE_PING,
         SERVICE_FRAME_COUNTER,
+        SERVICE_QUERY_ROUTE,
+        SERVICE_RETRY_ACTION,
     ):
         hass.services.async_remove(DOMAIN, service)
     _LOGGER.debug("Removed %s actions", DOMAIN)

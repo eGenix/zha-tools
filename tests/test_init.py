@@ -5,8 +5,10 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, patch
 
 import pytest
+import voluptuous as vol
 
-from homeassistant.exceptions import ServiceValidationError
+from homeassistant.core import Context
+from homeassistant.exceptions import ServiceValidationError, Unauthorized
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -18,9 +20,11 @@ from custom_components.zha_tools.const import (
     DOMAIN,
     SERVICE_FRAME_COUNTER,
     SERVICE_PING,
+    SERVICE_QUERY_ROUTE,
     SERVICE_RECONFIGURE,
     SERVICE_REINTERVIEW,
     SERVICE_REJOIN,
+    SERVICE_RETRY_ACTION,
     STATUS_COMPLETE,
     STATUS_REQUESTED,
 )
@@ -31,7 +35,15 @@ ALL_SERVICES = (
     SERVICE_REJOIN,
     SERVICE_PING,
     SERVICE_FRAME_COUNTER,
+    SERVICE_QUERY_ROUTE,
+    SERVICE_RETRY_ACTION,
 )
+
+# The read-only actions without retry parameters, with their handler function.
+QUERY_ACTIONS = [
+    (SERVICE_FRAME_COUNTER, "async_read_frame_counter"),
+    (SERVICE_QUERY_ROUTE, "async_query_route"),
+]
 
 DEFAULT_OPTIONS = {CONF_TIMEOUT: 10, CONF_MAX_RETRIES: 10, CONF_RETRY_DELAY: 5}
 
@@ -67,6 +79,7 @@ async def test_services_registered_and_removed(hass):
         (SERVICE_REINTERVIEW, "async_reinterview_device", {"device_id": "dev1"}),
         (SERVICE_PING, "async_ping_device", {"device_id": "dev1"}),
         (SERVICE_FRAME_COUNTER, "async_read_frame_counter", {"device_id": "dev1"}),
+        (SERVICE_QUERY_ROUTE, "async_query_route", {"device_id": "dev1"}),
         (
             SERVICE_REJOIN,
             "async_rejoin_device",
@@ -132,22 +145,22 @@ async def test_ping_returns_response(hass):
     }
 
 
-async def test_frame_counter_returns_response(hass):
+@pytest.mark.parametrize(("service", "action"), QUERY_ACTIONS)
+async def test_query_action_returns_response(hass, service, action):
     await _setup(hass)
     expected = {
         "device_id": "dev1",
+        "device_name": "Kitchen light",
         "ieee": "00:11:22:33:44:55:66:77",
         "status": STATUS_COMPLETE,
-        "frame_counter": 4711,
-        "last_seen": None,
     }
     with patch(
-        "custom_components.zha_tools.async_read_frame_counter",
+        f"custom_components.zha_tools.{action}",
         AsyncMock(return_value=expected),
     ) as mock:
         result = await hass.services.async_call(
             DOMAIN,
-            SERVICE_FRAME_COUNTER,
+            service,
             {"device_id": "dev1"},
             blocking=True,
             return_response=True,
@@ -157,8 +170,9 @@ async def test_frame_counter_returns_response(hass):
     assert mock.await_args.kwargs == {}
 
 
-async def test_frame_counter_all_devices_runs_a_batch(hass):
-    """The frame counter batch passes no retry parameters."""
+@pytest.mark.parametrize(("service", "action"), QUERY_ACTIONS)
+async def test_query_action_all_devices_runs_a_batch(hass, service, action):
+    """The read-only batches pass no retry parameters."""
     await _setup(hass)
     expected = {"devices": [], "total": 0, "complete": 0, "failed": 0}
     with patch(
@@ -167,15 +181,15 @@ async def test_frame_counter_all_devices_runs_a_batch(hass):
     ) as mock:
         result = await hass.services.async_call(
             DOMAIN,
-            SERVICE_FRAME_COUNTER,
+            service,
             {"all_devices": True},
             blocking=True,
             return_response=True,
         )
     assert result == expected
     args = mock.await_args.args
-    assert args[1] is zha_tools.async_read_frame_counter
-    assert args[2] == SERVICE_FRAME_COUNTER
+    assert args[1] is getattr(zha_tools, action)
+    assert args[2] == service
     assert mock.await_args.kwargs == {}
 
 
@@ -188,16 +202,17 @@ async def test_frame_counter_all_devices_runs_a_batch(hass):
     ],
     ids=["both", "neither", "retry-option"],
 )
-async def test_frame_counter_rejects_invalid_targets(hass, data):
+@pytest.mark.parametrize(("service", "action"), QUERY_ACTIONS)
+async def test_query_action_rejects_invalid_targets(hass, service, action, data):
     await _setup(hass)
     with patch(
-        "custom_components.zha_tools.async_read_frame_counter",
+        f"custom_components.zha_tools.{action}",
         AsyncMock(return_value={}),
     ) as mock:
         with pytest.raises(Exception):
             await hass.services.async_call(
                 DOMAIN,
-                SERVICE_FRAME_COUNTER,
+                service,
                 data,
                 blocking=True,
                 return_response=True,
@@ -403,3 +418,60 @@ async def test_rejoin_does_not_accept_all_devices(hass):
                 return_response=True,
             )
     mock.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    ("service", "data"),
+    [
+        (SERVICE_PING, {"device_id": "dev1", "timeout": "inf"}),
+        (SERVICE_PING, {"device_id": "dev1", "max_retries": 1_000_000}),
+        (SERVICE_RECONFIGURE, {"device_id": "dev1", "retry_delay": 301}),
+        (SERVICE_REJOIN, {"device_id": "dev1", "confirm": True, "rejoin_wait": "inf"}),
+    ],
+    ids=["inf-timeout", "huge-retries", "long-delay", "inf-rejoin-wait"],
+)
+async def test_unbounded_values_are_rejected(hass, service, data):
+    await _setup(hass)
+    with pytest.raises(vol.Invalid):
+        await hass.services.async_call(DOMAIN, service, data, blocking=True)
+
+
+@pytest.mark.parametrize(
+    ("service", "data"),
+    [
+        (SERVICE_RECONFIGURE, {"device_id": "dev1"}),
+        (SERVICE_REINTERVIEW, {"device_id": "dev1"}),
+        (SERVICE_PING, {"device_id": "dev1"}),
+        (SERVICE_FRAME_COUNTER, {"device_id": "dev1"}),
+        (SERVICE_QUERY_ROUTE, {"device_id": "dev1"}),
+        (SERVICE_REJOIN, {"device_id": "dev1", "confirm": True}),
+    ],
+)
+async def test_device_actions_are_admin_only(
+    hass, hass_read_only_user, service, data
+):
+    await _setup(hass)
+    with pytest.raises(Unauthorized):
+        await hass.services.async_call(
+            DOMAIN,
+            service,
+            data,
+            blocking=True,
+            context=Context(user_id=hass_read_only_user.id),
+        )
+
+
+async def test_retry_action_is_open_to_non_admins(hass, hass_read_only_user):
+    """The wrapper itself is not restricted; the wrapped action decides."""
+    await _setup(hass)
+    hass.services.async_register("test", "noop", AsyncMock(return_value=None))
+
+    result = await hass.services.async_call(
+        DOMAIN,
+        SERVICE_RETRY_ACTION,
+        {"action": "test.noop"},
+        blocking=True,
+        return_response=True,
+        context=Context(user_id=hass_read_only_user.id),
+    )
+    assert result["status"] == STATUS_COMPLETE

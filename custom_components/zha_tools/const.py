@@ -9,6 +9,8 @@ SERVICE_REINTERVIEW = "reinterview"
 SERVICE_REJOIN = "rejoin"
 SERVICE_PING = "ping"
 SERVICE_FRAME_COUNTER = "frame_counter"
+SERVICE_QUERY_ROUTE = "query_route"
+SERVICE_RETRY_ACTION = "retry_action"
 
 # Service / options keys.
 ATTR_DEVICE_ID = "device_id"
@@ -18,6 +20,12 @@ CONF_MAX_RETRIES = "max_retries"
 CONF_RETRY_DELAY = "retry_delay"
 CONF_REJOIN_WAIT = "rejoin_wait"
 CONF_CONFIRM = "confirm"
+CONF_ACTION = "action"
+CONF_DATA = "data"
+CONF_TARGET = "target"
+CONF_ATTEMPT_TIMEOUT = "attempt_timeout"
+CONF_BACKOFF = "backoff"
+CONF_MAX_DELAY = "max_delay"
 
 # Default values (all user configurable via the options flow and overridable
 # per service call).
@@ -25,6 +33,14 @@ DEFAULT_TIMEOUT = 20  # seconds to wait for a single attempt of a retried action
 DEFAULT_MAX_RETRIES = 10  # additional attempts after the first one
 DEFAULT_RETRY_DELAY = 5  # seconds to wait between attempts
 DEFAULT_REJOIN_WAIT = 60  # seconds to wait for a device to return after a rejoin
+
+# Defaults of the retry_action wrapper, which has its own timing parameters: it
+# is meant to keep trying for a long time, slowing down as it goes.
+DEFAULT_RETRY_ACTION_TIMEOUT = 600  # seconds for all attempts together
+DEFAULT_RETRY_ACTION_ATTEMPT_TIMEOUT = 30  # seconds for a single attempt
+DEFAULT_RETRY_ACTION_DELAY = 5  # seconds to wait after the first failed attempt
+DEFAULT_RETRY_ACTION_BACKOFF = 1.5  # delay multiplier after each failed attempt
+DEFAULT_RETRY_ACTION_MAX_DELAY = 120  # upper limit for the delay, in seconds
 
 # Frame counter values above which the frame counter action logs the counter as a
 # warning resp. an error instead of at info level.
@@ -38,6 +54,7 @@ STATUS_TIMEOUT = "timeout"  # attempt did not finish within the timeout
 STATUS_UNAVAILABLE = "unavailable"  # device did not respond
 STATUS_REQUESTED = "requested"  # rejoin request was sent; the outcome is unconfirmed
 STATUS_NOT_NEIGHBOR = "not_neighbor"  # coordinator stores no frame counter for it
+STATUS_NO_ROUTE = "no_route"  # no complete route to the device is known
 STATUS_ERROR = "error"  # the action raised an error for this device (batch runs only)
 
 # Keys used in the service response and the per-attempt result.
@@ -47,6 +64,10 @@ ATTR_ATTEMPTS = "attempts"
 # Key under which ``hass.data[DOMAIN]`` records the batched action currently
 # running, so that a second batched run can be refused.
 DATA_BATCH_RUNNING = "batch_running"
+
+# Key under which ``hass.data[DOMAIN]`` holds the lock that serializes this
+# integration's reconfigures (ZHA's progress events carry no device id).
+DATA_RECONFIGURE_LOCK = "reconfigure_lock"
 
 # The following mirror constants from the bundled ``zha`` integration. They are
 # duplicated here on purpose so importing this module does not pull in the heavy

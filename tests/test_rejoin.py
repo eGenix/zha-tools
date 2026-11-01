@@ -8,6 +8,7 @@ a reachable device, is never retried, and reports its outcome honestly.
 
 from __future__ import annotations
 
+import time
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -68,7 +69,11 @@ async def test_requested_when_not_waiting(hass):
         sent["n"] += 1
 
     result = await _run(hass, device, trigger, rejoin_wait=0)
-    assert result == {"device_id": "dev1", "status": STATUS_REQUESTED}
+    assert result == {
+        "device_id": "dev1",
+        "device_name": None,
+        "status": STATUS_REQUESTED,
+    }
     assert sent["n"] == 1
 
 
@@ -84,24 +89,39 @@ async def test_unavailable_device_is_not_sent_a_leave(hass):
     assert sent["n"] == 0  # never send a leave to an offline device
 
 
-async def test_complete_when_device_returns(hass):
+async def _run_with_current(hass, current):
+    """Run a waiting rejoin where ZHA holds ``current`` after the wait."""
     device = SimpleNamespace(available=True)
 
     async def trigger(dev):
-        # Device stays reachable -> treated as having rejoined.
         return None
 
-    result = await _run(hass, device, trigger, rejoin_wait=0.05)
+    with patch(
+        "custom_components.zha_tools.rejoin.async_get_current_device",
+        return_value=current,
+    ) as get_current:
+        result = await _run(hass, device, trigger, rejoin_wait=0.05)
+    get_current.assert_called_once_with(device)
+    return result
+
+
+async def test_complete_when_device_returns(hass):
+    """ZHA re-created the device and heard from it after the leave."""
+    current = SimpleNamespace(available=True, last_seen=time.time() + 60)
+    result = await _run_with_current(hass, current)
     assert result["status"] == STATUS_COMPLETE
 
 
 async def test_requested_when_device_absent_after_wait(hass):
-    device = SimpleNamespace(available=True)
+    """ZHA dropped the device on leave and it has not rejoined."""
+    result = await _run_with_current(hass, None)
+    assert result["status"] == STATUS_REQUESTED
 
-    async def trigger(dev):
-        device.available = False  # left and did not come back
 
-    result = await _run(hass, device, trigger, rejoin_wait=0.05)
+async def test_stale_device_object_does_not_confirm_the_rejoin(hass):
+    """The pre-leave object stays "available"; it must not count as a rejoin."""
+    stale = SimpleNamespace(available=True, last_seen=time.time() - 60)
+    result = await _run_with_current(hass, stale)
     assert result["status"] == STATUS_REQUESTED
 
 

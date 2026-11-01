@@ -21,7 +21,8 @@ reconfigure:
         Reconfigure every ZHA device except the coordinator, one after another,
         continuing with the next device whatever the previous one reported.
         Cannot be combined with a device. Only one batched run (reconfigure,
-        re-interview, ping or frame counter) can be in progress at a time.
+        re-interview, ping, frame counter or route query) can be in progress at a
+        time.
       required: false
       example: true
       selector:
@@ -91,7 +92,8 @@ reinterview:
         Re-interview every ZHA device except the coordinator, one after
         another, continuing with the next device whatever the previous one
         reported. Cannot be combined with a device. Only one batched run
-        (reconfigure, re-interview, ping or frame counter) can be in progress at a time.
+        (reconfigure, re-interview, ping, frame counter or route query) can be in progress at a
+        time.
       required: false
       example: true
       selector:
@@ -161,7 +163,8 @@ ping:
         Ping every ZHA device except the coordinator, one after another,
         continuing with the next device whatever the previous one reported.
         Cannot be combined with a device. Only one batched run (reconfigure,
-        re-interview, ping or frame counter) can be in progress at a time.
+        re-interview, ping, frame counter or route query) can be in progress at a
+        time.
       required: false
       example: true
       selector:
@@ -234,11 +237,145 @@ frame_counter:
       description: >-
         Read the frame counter of every ZHA device except the coordinator.
         Cannot be combined with a device. Only one batched run (reconfigure,
-        re-interview, ping or frame counter) can be in progress at a time.
+        re-interview, ping, frame counter or route query) can be in progress at a
+        time.
       required: false
       example: true
       selector:
         boolean:
+
+query_route:
+  name: Query ZHA device route
+  description: >-
+    Report everything the coordinator knows about the route between it and a
+    ZHA device, naming each hop by its network (NWK) address and display name:
+    the path of the device's last route record, the radio's source route and
+    route table entry, the path rebuilt from the last topology scan, the
+    device's parents and the routers that hear it. Safe: nothing is sent over
+    the air. Radio tables are only read from Silicon Labs (EZSP) radios. Works
+    on a single device, or on all ZHA devices except the coordinator.
+  fields:
+    device_id:
+      name: Device
+      description: >-
+        The ZHA device to query the route for. Required unless "All devices"
+        is turned on.
+      required: false
+      selector:
+        device:
+          filter:
+            - integration: zha
+    all_devices:
+      name: All devices
+      description: >-
+        Query the route of every ZHA device except the coordinator. Cannot be
+        combined with a device. Only one batched run (reconfigure,
+        re-interview, ping, frame counter or route query) can be in progress at
+        a time.
+      required: false
+      example: true
+      selector:
+        boolean:
+
+retry_action:
+  name: Call action reliably
+  description: >-
+    Call another action, e.g. climate.set_temperature or cover.close_cover,
+    and keep repeating it until it goes through or the timeout runs out,
+    waiting longer after each failed attempt (slow exponential backoff). For
+    ZHA entities an attempt succeeds once the device has acknowledged the
+    command; while a targeted entity is unavailable, the action is not called
+    and the attempt counts as failed. Only wrap actions that can safely run
+    more than once (set a value, not toggle it). Invalid calls and ZHA Tools
+    actions are not retried. Returns the status (complete or timeout), the
+    number of attempts and the last error.
+  fields:
+    action:
+      name: Action
+      description: The action to call, as domain.action.
+      required: true
+      example: cover.close_cover
+      selector:
+        text:
+    target:
+      name: Target
+      description: >-
+        The target of the action (entity_id, device_id, area_id), as for a
+        regular action call.
+      required: false
+      example: '{"entity_id": "cover.living_room_blind"}'
+      selector:
+        object:
+    data:
+      name: Data
+      description: The data for the action, as for a regular action call.
+      required: false
+      example: '{"temperature": 21}'
+      selector:
+        object:
+    timeout:
+      name: Timeout
+      description: >-
+        Overall time limit in seconds for all attempts and the waits between
+        them.
+      required: false
+      default: 600
+      selector:
+        number:
+          min: 1
+          max: 86400
+          step: 1
+          unit_of_measurement: seconds
+          mode: box
+    attempt_timeout:
+      name: Attempt timeout
+      description: Time limit in seconds for a single attempt.
+      required: false
+      default: 30
+      selector:
+        number:
+          min: 1
+          max: 600
+          step: 1
+          unit_of_measurement: seconds
+          mode: box
+    retry_delay:
+      name: Initial retry delay
+      description: Seconds to wait after the first failed attempt.
+      required: false
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 3600
+          step: 1
+          unit_of_measurement: seconds
+          mode: box
+    backoff:
+      name: Backoff factor
+      description: >-
+        Factor the delay is multiplied by after each failed attempt. 1 keeps
+        the delay constant; 1.5 gives a slow exponential backoff.
+      required: false
+      default: 1.5
+      selector:
+        number:
+          min: 1
+          max: 10
+          step: 0.1
+          mode: box
+    max_delay:
+      name: Maximum retry delay
+      description: Upper limit in seconds for the delay between attempts.
+      required: false
+      default: 120
+      selector:
+        number:
+          min: 1
+          max: 3600
+          step: 1
+          unit_of_measurement: seconds
+          mode: box
 
 rejoin:
   name: "DANGER: rejoin ZHA device"

@@ -12,7 +12,11 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.zha_tools.batch import async_run_on_all_devices
 from custom_components.zha_tools.const import DOMAIN, STATUS_TIMEOUT
-from custom_components.zha_tools.helpers import device_label
+from custom_components.zha_tools.helpers import (
+    device_label,
+    device_name,
+    device_name_by_ieee,
+)
 from custom_components.zha_tools.ping import async_ping_device
 
 
@@ -87,3 +91,35 @@ async def test_batch_error_log_includes_device_name(hass, caplog):
     errors = [r for r in caplog.records if r.levelno == logging.ERROR]
     assert len(errors) == 1
     assert "Kitchen light" in errors[0].getMessage()
+
+
+async def test_device_name_and_ieee_lookup(hass):
+    entry = MockConfigEntry(domain=DOMAIN)
+    entry.add_to_hass(hass)
+    registry = dr.async_get(hass)
+    device = registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        connections={(dr.CONNECTION_ZIGBEE, "00:11:22:33:44:55:66:77")},
+        name="IKEA bulb",
+    )
+    registry.async_update_device(device.id, name_by_user="Kitchen light")
+
+    assert device_name(hass, device.id) == "Kitchen light"
+    assert device_name(hass, "unknown") is None
+    assert device_name_by_ieee(hass, "00:11:22:33:44:55:66:77") == "Kitchen light"
+    assert device_name_by_ieee(hass, "ff:ff:ff:ff:ff:ff:ff:ff") is None
+
+
+async def test_batch_error_result_includes_device_name(hass):
+    device_id = _register_device(hass, "Kitchen light")
+
+    async def action(hass_, device_id_, **params):
+        raise RuntimeError("boom")
+
+    with patch(
+        "custom_components.zha_tools.batch.async_get_zha_device_ids",
+        return_value=[device_id],
+    ):
+        result = await async_run_on_all_devices(hass, action, "ping")
+
+    assert result["devices"][0]["device_name"] == "Kitchen light"

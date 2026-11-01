@@ -56,7 +56,12 @@ async def test_complete_when_device_answers(hass):
         return None
 
     result = await _run(hass, device, trigger, refresh)
-    assert result == {"device_id": "dev1", "status": STATUS_COMPLETE, "attempts": 1}
+    assert result == {
+        "device_id": "dev1",
+        "device_name": None,
+        "status": STATUS_COMPLETE,
+        "attempts": 1,
+    }
     refresh.assert_not_awaited()
 
 
@@ -275,3 +280,32 @@ async def test_adapter_address_refresh_broadcasts_nwk_addr_req():
     broadcast.assert_awaited_once_with(
         "app", "NWK_addr_req", None, 0, device.ieee, "Single", 0
     )
+
+
+async def test_failed_address_refresh_does_not_stop_the_retries(hass):
+    attempts = {"n": 0}
+
+    async def trigger(dev, timeout):
+        attempts["n"] += 1
+        if attempts["n"] == 1:
+            raise TimeoutError
+
+    refresh = AsyncMock(side_effect=DeviceUnreachableError("no route"))
+    device = SimpleNamespace(available=True)
+
+    result = await _run(hass, device, trigger, refresh=refresh, max_retries=2)
+
+    assert result["status"] == STATUS_COMPLETE
+    assert result["attempts"] == 2
+    refresh.assert_awaited_once()
+
+
+async def test_adapter_address_refresh_translates_delivery_error():
+    broadcast = AsyncMock(side_effect=FakeDeliveryError("radio busy"))
+    device = _zha_device({})
+
+    with (
+        patch.dict(sys.modules, _fake_zigpy(broadcast)),
+        pytest.raises(DeviceUnreachableError, match="radio busy"),
+    ):
+        await zha_adapter.async_trigger_address_refresh(device)

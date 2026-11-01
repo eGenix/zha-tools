@@ -28,7 +28,7 @@ import logging
 from homeassistant.core import HomeAssistant
 
 from .const import STATUS_COMPLETE, STATUS_TIMEOUT, STATUS_UNAVAILABLE
-from .helpers import device_label
+from .helpers import device_label, device_name
 
 # Imported as module-level names so tests can patch them on this module.
 from .zha_adapter import (
@@ -108,7 +108,17 @@ async def _async_refresh_address(hass: HomeAssistant, device_id: str) -> None:
     name = device_label(hass, device_id)
     device = async_get_zha_device(hass, device_id)
     _LOGGER.debug("Looking up the current network address of ZHA device %s", name)
-    await async_trigger_address_refresh(device)
+    try:
+        await async_trigger_address_refresh(device)
+    except DeviceUnreachableError as err:
+        # The lookup is only a helper for the next attempts; failing to send
+        # it must not cancel the retries the caller asked for.
+        _LOGGER.warning(
+            "Could not send the network address lookup for ZHA device %s (%s); "
+            "retrying the ping anyway",
+            name,
+            err,
+        )
 
 
 async def async_ping_device(
@@ -133,7 +143,9 @@ async def async_ping_device(
         retry_delay: Seconds to wait between attempts.
 
     Returns:
-        A mapping with the final ``status`` and the number of ``attempts`` made.
+        A mapping with ``device_id``, the device's display name in
+        ``device_name``, the final ``status`` and the number of ``attempts``
+        made.
 
     Raises:
         ServiceValidationError: If ``device_id`` is not a known ZHA device.
@@ -187,4 +199,9 @@ async def async_ping_device(
         attempts,
         status,
     )
-    return {"device_id": device_id, "status": status, "attempts": attempts}
+    return {
+        "device_id": device_id,
+        "device_name": device_name(hass, device_id),
+        "status": status,
+        "attempts": attempts,
+    }

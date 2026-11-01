@@ -13,27 +13,46 @@ back, and will then need a manual re-pair. For that reason the rejoin is:
 * only ever sent to a device that is currently reachable; and
 * logged at warning level before it is sent.
 
+Sending the leave makes zigpy and ZHA remove the device right away: its Home
+Assistant device and entities disappear until it rejoins, when ZHA interviews
+it again and re-creates them (Home Assistant restores the registry entries it
+kept for them).
+
 The outcome cannot be confirmed reliably: the call returns once the leave has
-been sent, and -- if asked to wait -- reports ``complete`` only if the device is
-reachable again afterwards, otherwise ``requested`` (it may still be rejoining,
-or it may be gone).
+been sent, and -- if asked to wait -- reports ``complete`` only if ZHA knows the
+device again afterwards and has heard from it since the leave, otherwise
+``requested`` (it may still be rejoining, or it may be gone).
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import time
 
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 
 from .const import STATUS_COMPLETE, STATUS_REQUESTED, STATUS_UNAVAILABLE
-from .helpers import device_label
+from .helpers import device_label, device_name
 
 # Imported as module-level names so tests can patch them on this module.
-from .zha_adapter import async_get_zha_device, async_trigger_rejoin
+from .zha_adapter import (
+    async_get_current_device,
+    async_get_zha_device,
+    async_trigger_rejoin,
+)
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _result(hass: HomeAssistant, device_id: str, status: str) -> dict:
+    """Return the rejoin result mapping for a device and status."""
+    return {
+        "device_id": device_id,
+        "device_name": device_name(hass, device_id),
+        "status": status,
+    }
 
 
 async def async_rejoin_device(
@@ -52,7 +71,8 @@ async def async_rejoin_device(
             potentially device-stranding rejoin by accident.
 
     Returns:
-        A mapping with ``device_id`` and the resulting ``status``:
+        A mapping with ``device_id``, the device's display name in
+        ``device_name`` and the resulting ``status``:
 
         * ``unavailable`` -- the device was offline, so no leave was sent;
         * ``requested`` -- the leave-with-rejoin was sent but the device has not
@@ -84,7 +104,7 @@ async def async_rejoin_device(
             name,
             STATUS_UNAVAILABLE,
         )
-        return {"device_id": device_id, "status": STATUS_UNAVAILABLE}
+        return _result(hass, device_id, STATUS_UNAVAILABLE)
 
     _LOGGER.warning(
         "Sending leave-with-rejoin to ZHA device %s. If the device firmware "
@@ -92,6 +112,7 @@ async def async_rejoin_device(
         "requiring a manual re-pair.",
         name,
     )
+    sent_at = time.time()
     await async_trigger_rejoin(device)
 
     if rejoin_wait <= 0:
@@ -101,17 +122,26 @@ async def async_rejoin_device(
             name,
             STATUS_REQUESTED,
         )
-        return {"device_id": device_id, "status": STATUS_REQUESTED}
+        return _result(hass, device_id, STATUS_REQUESTED)
 
     _LOGGER.debug("Waiting up to %ss for %s to rejoin", rejoin_wait, name)
     await asyncio.sleep(rejoin_wait)
-    if device.available:
+    # The leave makes zigpy and ZHA drop the device, so the object used above is
+    # stale. Only the device ZHA re-creates when it rejoins, and only if it was
+    # heard from after the leave, confirms the rejoin.
+    current = async_get_current_device(device)
+    if (
+        current is not None
+        and current.available
+        and current.last_seen is not None
+        and current.last_seen > sent_at
+    ):
         _LOGGER.info(
             "ZHA device %s is reachable again after the rejoin, reporting %s",
             name,
             STATUS_COMPLETE,
         )
-        return {"device_id": device_id, "status": STATUS_COMPLETE}
+        return _result(hass, device_id, STATUS_COMPLETE)
 
     _LOGGER.warning(
         "ZHA device %s has not returned within %ss; it may still be rejoining or "
@@ -120,4 +150,4 @@ async def async_rejoin_device(
         rejoin_wait,
         STATUS_REQUESTED,
     )
-    return {"device_id": device_id, "status": STATUS_REQUESTED}
+    return _result(hass, device_id, STATUS_REQUESTED)

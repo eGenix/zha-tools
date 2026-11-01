@@ -1,11 +1,11 @@
 """Run a ZHA Tools action across all configured ZHA devices.
 
-The reconfigure, re-interview, ping and frame counter actions can be pointed at
-every device ZHA manages instead of at a single one. This module holds the shared
-machinery for that: it looks up the devices (all of them except the coordinator), works
-through them one at a time -- the next device is only started once the previous
-one has finished, successfully or not -- and returns a per-device result list
-plus a short summary.
+The reconfigure, re-interview, ping, frame counter and route query actions can
+be pointed at every device ZHA manages instead of at a single one. This module
+holds the shared machinery for that: it looks up the devices (all of them except
+the coordinator), works through them one at a time -- the next device is only
+started once the previous one has finished, successfully or not -- and returns a
+per-device result list plus a short summary.
 
 Only one batch run may be active at a time. A batch can keep a Zigbee network
 busy for a long while, and two of them talking to the same devices in parallel
@@ -23,7 +23,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 
 from .const import DATA_BATCH_RUNNING, DOMAIN, STATUS_COMPLETE, STATUS_ERROR
-from .helpers import device_label
+from .helpers import device_label, device_name
 
 # Imported as a module-level name so tests can patch it on this module.
 from .zha_adapter import async_get_zha_device_ids
@@ -32,7 +32,8 @@ _LOGGER = logging.getLogger(__name__)
 
 # A single-device action: ``(hass, device_id, **params) -> result mapping``.
 # ``async_reconfigure_device``, ``async_reinterview_device``,
-# ``async_ping_device`` and ``async_read_frame_counter`` all match.
+# ``async_ping_device``, ``async_read_frame_counter`` and ``async_query_route``
+# all match.
 DeviceAction = Callable[..., Awaitable[dict]]
 
 
@@ -134,6 +135,7 @@ async def async_run_on_all_devices(
                 )
                 result = {
                     "device_id": device_id,
+                    "device_name": device_name(hass, device_id),
                     "status": STATUS_ERROR,
                     "error": str(err),
                 }

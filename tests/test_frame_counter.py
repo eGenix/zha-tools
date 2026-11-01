@@ -63,6 +63,7 @@ async def test_complete_when_device_is_a_neighbor(hass):
 
     assert result == {
         "device_id": "dev1",
+        "device_name": None,
         "ieee": IEEE,
         "status": STATUS_COMPLETE,
         "frame_counter": 4711,
@@ -79,6 +80,7 @@ async def test_not_neighbor_when_no_counter_is_stored(hass):
 
     assert result == {
         "device_id": "dev1",
+        "device_name": None,
         "ieee": IEEE,
         "status": STATUS_NOT_NEIGHBOR,
         "frame_counter": None,
@@ -106,7 +108,8 @@ async def test_log_level_depends_on_counter(hass, caplog, frame_counter, level):
     records = [r for r in caplog.records if "frame counter" in r.getMessage()]
     assert len(records) == 1
     assert records[0].levelno == level
-    assert str(frame_counter) in records[0].getMessage()
+    # The counter value itself is never logged.
+    assert frame_counter not in records[0].args
 
 
 async def test_errors_propagate(hass):
