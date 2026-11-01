@@ -68,8 +68,7 @@ def _only_one_batch(
     if DATA_BATCH_RUNNING in data:
         running = data[DATA_BATCH_RUNNING]
         logger.warning(
-            "Refusing to run %s on all devices: a batched %s run is still in "
-            "progress",
+            "Refusing to run %s on all devices: a batched %s run is still in progress",
             action_name,
             running,
         )

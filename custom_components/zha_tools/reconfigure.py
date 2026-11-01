@@ -119,8 +119,7 @@ class _ReconfigureCollector:
                 if not success:
                     self.failed_reports.append(f"{cluster}.{attr_name}")
                 _LOGGER.debug(
-                    "ZHA reconfigure of %s: configure-reporting of %s.%s "
-                    "reported %s",
+                    "ZHA reconfigure of %s: configure-reporting of %s.%s reported %s",
                     self.label,
                     cluster,
                     attr_name,
@@ -128,9 +127,7 @@ class _ReconfigureCollector:
                 )
         elif event_type == ZHA_EVENT_CFG_DONE:
             self.done = True
-            _LOGGER.debug(
-                "ZHA reconfigure of %s: configuration done", self.label
-            )
+            _LOGGER.debug("ZHA reconfigure of %s: configuration done", self.label)
         # Other event types are not relevant for the outcome and are ignored.
 
     @staticmethod
@@ -231,9 +228,7 @@ async def _async_run_reconfigure(
     unsub = async_dispatcher_connect(
         hass, SIGNAL_DEVICE_RECONFIGURE_EVENT, collector.handle_event
     )
-    _LOGGER.debug(
-        "Triggering ZHA reconfigure of %s (timeout %ss)", name, timeout
-    )
+    _LOGGER.debug("Triggering ZHA reconfigure of %s (timeout %ss)", name, timeout)
     try:
         await asyncio.wait_for(async_trigger_reconfigure(device), timeout)
     except TimeoutError:
@@ -321,8 +316,7 @@ async def async_reconfigure_device(
     name = device_label(hass, device_id)
     max_attempts = max_retries + 1
     _LOGGER.info(
-        "Reconfiguring ZHA device %s (timeout=%ss, max_retries=%s, "
-        "retry_delay=%ss)",
+        "Reconfiguring ZHA device %s (timeout=%ss, max_retries=%s, retry_delay=%ss)",
         name,
         timeout,
         max_retries,

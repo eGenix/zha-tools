@@ -45,11 +45,15 @@ def _register(hass, ieee, name):
     """Register a ZHA-style device (with a zigbee connection) by name."""
     entry = MockConfigEntry(domain=DOMAIN)
     entry.add_to_hass(hass)
-    return dr.async_get(hass).async_get_or_create(
-        config_entry_id=entry.entry_id,
-        connections={(dr.CONNECTION_ZIGBEE, ieee)},
-        name=name,
-    ).id
+    return (
+        dr.async_get(hass)
+        .async_get_or_create(
+            config_entry_id=entry.entry_id,
+            connections={(dr.CONNECTION_ZIGBEE, ieee)},
+            name=name,
+        )
+        .id
+    )
 
 
 @pytest.fixture
@@ -206,12 +210,8 @@ async def test_no_route_without_radio_or_tables(hass, names):
 async def test_topology_walk_detects_loops(hass, names):
     """Two routers pointing at each other must not loop forever."""
     routes = {
-        COORD_IEEE: [
-            {"destination": TARGET, "status": "Active", "next_hop": ROUTER}
-        ],
-        ROUTER_IEEE: [
-            {"destination": TARGET, "status": "Active", "next_hop": COORD}
-        ],
+        COORD_IEEE: [{"destination": TARGET, "status": "Active", "next_hop": ROUTER}],
+        ROUTER_IEEE: [{"destination": TARGET, "status": "Active", "next_hop": COORD}],
     }
     report = build_route_report(
         hass,
@@ -481,7 +481,6 @@ async def test_adapter_reuses_recent_radio_tables():
     other = FakeEzsp()
     await zha_adapter.async_get_route_data(_zha_device(other))
     assert other.route_reads == 3  # another radio is read afresh
-
 
 
 async def test_coordinator_target_is_refused(hass):

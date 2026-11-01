@@ -155,7 +155,9 @@ def build_dark(light_svg: str) -> str:
     for light, deep in zip(LIGHT_STOPS, DARK_STOPS):
         dark = dark.replace(light, deep)
 
-    sheen = '  <rect x="16" y="16" width="480" height="480" rx="104" fill="url(#sheen)"/>\n'
+    sheen = (
+        '  <rect x="16" y="16" width="480" height="480" rx="104" fill="url(#sheen)"/>\n'
+    )
     if sheen not in dark:
         raise SystemExit("sheen rect anchor not found in logo.svg")
     ring = (

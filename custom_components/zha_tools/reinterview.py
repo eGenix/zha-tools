@@ -57,9 +57,7 @@ async def _async_reinterview_once(
         )
         return STATUS_UNAVAILABLE
 
-    _LOGGER.debug(
-        "Triggering ZHA re-interview of %s (timeout %ss)", name, timeout
-    )
+    _LOGGER.debug("Triggering ZHA re-interview of %s (timeout %ss)", name, timeout)
     try:
         await asyncio.wait_for(async_trigger_reinterview(device), timeout)
     except TimeoutError:
@@ -71,9 +69,7 @@ async def _async_reinterview_once(
         )
         return STATUS_TIMEOUT
 
-    _LOGGER.info(
-        "ZHA re-interview of %s finished, reporting %s", name, STATUS_COMPLETE
-    )
+    _LOGGER.info("ZHA re-interview of %s finished, reporting %s", name, STATUS_COMPLETE)
     return STATUS_COMPLETE
 
 
@@ -108,8 +104,7 @@ async def async_reinterview_device(
     name = device_label(hass, device_id)
     max_attempts = max_retries + 1
     _LOGGER.info(
-        "Re-interviewing ZHA device %s (timeout=%ss, max_retries=%s, "
-        "retry_delay=%ss)",
+        "Re-interviewing ZHA device %s (timeout=%ss, max_retries=%s, retry_delay=%ss)",
         name,
         timeout,
         max_retries,

@@ -77,9 +77,7 @@ def _register_flaky(hass, failures, error=HomeAssistantError("no answer")):
 async def test_succeeds_after_retries_with_backoff(hass, clock):
     calls = _register_flaky(hass, failures=5)
 
-    result = await async_retry_action(
-        hass, "test.flaky", {"position": 0}, {}, **PARAMS
-    )
+    result = await async_retry_action(hass, "test.flaky", {"position": 0}, {}, **PARAMS)
 
     assert result == {
         "action": "test.flaky",
@@ -212,7 +210,6 @@ async def test_service_call_uses_defaults(hass, clock):
     assert result["attempts"] == 3
     assert clock.sleeps == [5, 7.5]
     assert calls[-1].data == {"position": 10}
-
 
 
 async def test_service_call_rejects_bad_action_name(hass):

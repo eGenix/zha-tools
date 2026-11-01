@@ -448,9 +448,7 @@ async def test_unbounded_values_are_rejected(hass, service, data):
         (SERVICE_REJOIN, {"device_id": "dev1", "confirm": True}),
     ],
 )
-async def test_device_actions_are_admin_only(
-    hass, hass_read_only_user, service, data
-):
+async def test_device_actions_are_admin_only(hass, hass_read_only_user, service, data):
     await _setup(hass)
     with pytest.raises(Unauthorized):
         await hass.services.async_call(

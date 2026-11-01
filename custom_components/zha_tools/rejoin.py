@@ -117,8 +117,7 @@ async def async_rejoin_device(
 
     if rejoin_wait <= 0:
         _LOGGER.info(
-            "Leave-with-rejoin sent to %s; not waiting for it to return, "
-            "reporting %s",
+            "Leave-with-rejoin sent to %s; not waiting for it to return, reporting %s",
             name,
             STATUS_REQUESTED,
         )

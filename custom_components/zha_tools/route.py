@@ -81,9 +81,7 @@ class _HopNamer:
         """
         self._hass = hass
         self._devices: dict[int, dict] = data["devices"]
-        self._nwk_by_ieee = {
-            info["ieee"]: nwk for nwk, info in self._devices.items()
-        }
+        self._nwk_by_ieee = {info["ieee"]: nwk for nwk, info in self._devices.items()}
         self._names: dict[str, str | None] = {}
 
     def ieee(self, nwk: int) -> str | None:

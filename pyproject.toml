@@ -22,6 +22,7 @@ dev = [
     "pytest-asyncio",
     "pytest-homeassistant-custom-component",
     "pytest-timeout",
+    "ruff",
 ]
 
 [tool.uv]
@@ -31,6 +32,13 @@ package = false
 # Ignore package releases newer than this timestamp (~14 days before the
 # project date) to mitigate supply-chain risk from freshly published versions.
 exclude-newer = "2026-06-06T00:00:00Z"
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+
+[tool.ruff.lint]
+ignore = ["E501", "E712", "N", "F841", "E402", "F811", "E741", "E731"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

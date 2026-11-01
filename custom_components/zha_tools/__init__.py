@@ -138,9 +138,7 @@ RETRY_ACTION_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_ACTION): cv.service,
         vol.Optional(CONF_DATA, default=dict): dict,
-        vol.Optional(CONF_TARGET, default=dict): vol.Schema(
-            cv.TARGET_SERVICE_FIELDS
-        ),
+        vol.Optional(CONF_TARGET, default=dict): vol.Schema(cv.TARGET_SERVICE_FIELDS),
         # All timing values are bounded (which also rejects "inf"), so a call
         # cannot keep retrying forever or flood the network with attempts.
         vol.Optional(CONF_TIMEOUT, default=DEFAULT_RETRY_ACTION_TIMEOUT): vol.All(
@@ -239,8 +237,7 @@ async def _async_handle_retry_action(
         # ``all_devices: false`` without a device_id passes the schema but
         # leaves nothing to work on.
         raise ServiceValidationError(
-            f"{DOMAIN}.{service} needs either a device_id or all_devices set "
-            f"to true"
+            f"{DOMAIN}.{service} needs either a device_id or all_devices set to true"
         )
     _LOGGER.debug("Service %s.%s returning %s", DOMAIN, service, result)
     return result
@@ -290,8 +287,7 @@ async def _async_handle_query_action(
         result = await action(hass, device_id)
     else:
         raise ServiceValidationError(
-            f"{DOMAIN}.{service} needs either a device_id or all_devices set "
-            f"to true"
+            f"{DOMAIN}.{service} needs either a device_id or all_devices set to true"
         )
     if not quiet:
         # Only the status is logged; the actions log their own results.

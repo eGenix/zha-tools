@@ -11,12 +11,14 @@ ZIP_NAME      := $(INTEGRATION)-$(VERSION).zip
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install venv test validate run logo build dist clean distclean
+.PHONY: help install venv test lint format validate run logo build dist clean distclean
 
 help:
 	@echo "Available targets:"
 	@echo "  install / venv  Create the venv and install dev dependencies (uv sync)"
 	@echo "  test            Run the test suite with pytest"
+	@echo "  lint            Check code with the ruff linter and formatter"
+	@echo "  format          Fix lint issues and reformat code with ruff"
 	@echo "  validate / run  Validate the integration"
 	@echo "  logo            Rebuild the logo SVGs and brand PNGs from tools/"
 	@echo "  build           Stage the integration under $(BUILD_DIR)/"
@@ -30,6 +32,14 @@ install venv:
 
 test: install
 	uv run python -m pytest
+
+lint: install
+	uv run ruff check .
+	uv run ruff format --check .
+
+format: install
+	uv run ruff check --fix .
+	uv run ruff format .
 
 validate:
 	uv run --script scripts/validate.py
