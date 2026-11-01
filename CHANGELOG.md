@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2026-11-01
+
+### Changed
+
+- `zha_tools.frame_counter` no longer writes anything to the log: no counter values, no notice that a read took place, also not in all-devices runs or at debug level. The warning / error log levels for counters above 100 / 1000 are gone. Results are only returned in the response; errors are still raised (single reads) or returned as the device's result (all-devices runs).
+
 ## [0.6.0] - 2026-11-01
 
 ### Added
@@ -71,6 +77,7 @@ Initial release of ZHA Tools, a Home Assistant custom integration that provides 
 - Debug logging of each attempt and of the binding / configure-reporting results reported back by ZHA.
 - A bundled brand logo with light and dark variants, served directly by the integration on Home Assistant 2026.3.0 and newer.
 
+[0.6.1]: https://github.com/egenix/zha-tools/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/egenix/zha-tools/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/egenix/zha-tools/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/egenix/zha-tools/compare/v0.3.0...v0.4.0
