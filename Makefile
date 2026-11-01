@@ -11,7 +11,7 @@ ZIP_NAME      := $(INTEGRATION)-$(VERSION).zip
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install venv test lint format validate run logo build dist clean distclean
+.PHONY: help install venv test lint format hooks check validate run logo build dist clean distclean
 
 help:
 	@echo "Available targets:"
@@ -19,6 +19,8 @@ help:
 	@echo "  test            Run the test suite with pytest"
 	@echo "  lint            Check code with the ruff linter and formatter"
 	@echo "  format          Fix lint issues and reformat code with ruff"
+	@echo "  hooks           Install the prek pre-commit git hook"
+	@echo "  check           Run all pre-commit hooks on all files"
 	@echo "  validate / run  Validate the integration"
 	@echo "  logo            Rebuild the logo SVGs and brand PNGs from tools/"
 	@echo "  build           Stage the integration under $(BUILD_DIR)/"
@@ -40,6 +42,12 @@ lint: install
 format: install
 	uv run ruff check --fix .
 	uv run ruff format .
+
+hooks: install
+	uv run prek install
+
+check: install
+	uv run prek run --all-files
 
 validate:
 	uv run --script scripts/validate.py

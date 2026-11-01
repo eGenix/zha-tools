@@ -21,6 +21,7 @@ dev = [
     "pytest",
     "pytest-asyncio",
     "pytest-homeassistant-custom-component",
+    "prek",
     "pytest-timeout",
     "ruff",
 ]
@@ -38,6 +39,8 @@ line-length = 88
 target-version = "py313"
 
 [tool.ruff.lint]
+# T10 flags debugger imports and breakpoint() calls (the "debug-statements" check).
+extend-select = ["T10"]
 ignore = ["E501", "E712", "N", "F841", "E402", "F811", "E741", "E731"]
 
 [tool.pytest.ini_options]

@@ -1,0 +1,32 @@
+# Pre-commit hooks, run with prek (see the Makefile's "hooks" and "check" targets).
+repos:
+  # Standard checks, implemented natively by prek (no download needed).
+  - repo: builtin
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: check-added-large-files
+      - id: detect-private-key
+      - id: mixed-line-ending
+
+  # Ruff from the project venv, so its version matches uv.lock. Its T10 rules
+  # (see pyproject.toml) cover the "debug-statements" check.
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: uv run ruff check --fix
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
+      - id: ruff-format
+        name: ruff format
+        entry: uv run ruff format
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
