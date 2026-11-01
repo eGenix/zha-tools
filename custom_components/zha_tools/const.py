@@ -42,11 +42,6 @@ DEFAULT_RETRY_ACTION_DELAY = 5  # seconds to wait after the first failed attempt
 DEFAULT_RETRY_ACTION_BACKOFF = 1.5  # delay multiplier after each failed attempt
 DEFAULT_RETRY_ACTION_MAX_DELAY = 120  # upper limit for the delay, in seconds
 
-# Frame counter values above which the frame counter action logs the counter as a
-# warning resp. an error instead of at info level.
-FRAME_COUNTER_WARNING_THRESHOLD = 100
-FRAME_COUNTER_ERROR_THRESHOLD = 1000
-
 # Reported outcomes.
 STATUS_COMPLETE = "complete"  # finished successfully (e.g. binding and reporting ok)
 STATUS_INCOMPLETE = "incomplete"  # finished, but binding/reporting failed

@@ -30,6 +30,16 @@ from .zha_adapter import async_get_zha_device_ids
 
 _LOGGER = logging.getLogger(__name__)
 
+
+class _NoLog:
+    """A stand-in logger which drops everything, for actions which must not log."""
+
+    def __getattr__(self, name: str) -> Callable[..., None]:
+        return lambda *args, **kwargs: None
+
+
+_NO_LOG = _NoLog()
+
 # A single-device action: ``(hass, device_id, **params) -> result mapping``.
 # ``async_reconfigure_device``, ``async_reinterview_device``,
 # ``async_ping_device``, ``async_read_frame_counter`` and ``async_query_route``
@@ -38,12 +48,15 @@ DeviceAction = Callable[..., Awaitable[dict]]
 
 
 @contextmanager
-def _only_one_batch(hass: HomeAssistant, action_name: str) -> Iterator[None]:
+def _only_one_batch(
+    hass: HomeAssistant, action_name: str, logger: logging.Logger | _NoLog
+) -> Iterator[None]:
     """Mark a batch run as active for the duration of the block.
 
     Args:
         hass: The Home Assistant instance.
         action_name: Name of the action being run, used in messages.
+        logger: The logger to report a refused run on.
 
     Yields:
         Nothing; the block runs as the one active batch.
@@ -54,7 +67,7 @@ def _only_one_batch(hass: HomeAssistant, action_name: str) -> Iterator[None]:
     data = hass.data.setdefault(DOMAIN, {})
     if DATA_BATCH_RUNNING in data:
         running = data[DATA_BATCH_RUNNING]
-        _LOGGER.warning(
+        logger.warning(
             "Refusing to run %s on all devices: a batched %s run is still in "
             "progress",
             action_name,
@@ -75,6 +88,7 @@ async def async_run_on_all_devices(
     hass: HomeAssistant,
     action: DeviceAction,
     action_name: str,
+    quiet: bool = False,
     **params: object,
 ) -> dict:
     """Run a single-device action on every ZHA device except the coordinator.
@@ -90,6 +104,8 @@ async def async_run_on_all_devices(
         action: The single-device coroutine function to run, called as
             ``action(hass, device_id, **params)``.
         action_name: Name of the action, used in log and error messages.
+        quiet: Log nothing at all, for actions whose use must not show up in
+            the log. Errors are still returned in the device's result.
         **params: Extra keyword arguments passed on to ``action``.
 
     Returns:
@@ -100,10 +116,11 @@ async def async_run_on_all_devices(
         ServiceValidationError: If another batch run is already active, or if
             the ZHA integration is not set up.
     """
-    with _only_one_batch(hass, action_name):
-        device_ids = async_get_zha_device_ids(hass)
+    log = _NO_LOG if quiet else _LOGGER
+    with _only_one_batch(hass, action_name, log):
+        device_ids = async_get_zha_device_ids(hass, quiet=quiet)
         total = len(device_ids)
-        _LOGGER.info(
+        log.info(
             "Running %s on all %d ZHA device(s) except the coordinator",
             action_name,
             total,
@@ -112,7 +129,7 @@ async def async_run_on_all_devices(
         results = []
         for number, device_id in enumerate(device_ids, start=1):
             name = device_label(hass, device_id)
-            _LOGGER.info(
+            log.info(
                 "Batched %s: device %d of %d (%s)",
                 action_name,
                 number,
@@ -124,9 +141,9 @@ async def async_run_on_all_devices(
             except Exception as err:
                 # The whole point of a batch run is that one bad device does
                 # not stop the rest. The error is not swallowed: it is logged
-                # with its traceback and handed back to the caller as this
-                # device's result.
-                _LOGGER.exception(
+                # with its traceback (unless quiet) and handed back to the
+                # caller as this device's result.
+                log.exception(
                     "Batched %s: device %s (%d of %d) raised an error",
                     action_name,
                     name,
@@ -143,8 +160,8 @@ async def async_run_on_all_devices(
 
         complete = sum(1 for result in results if result["status"] == STATUS_COMPLETE)
         failed = total - complete
-        log = _LOGGER.info if failed == 0 else _LOGGER.warning
-        log(
+        summary = log.info if failed == 0 else log.warning
+        summary(
             "Batched %s finished: %d of %d device(s) complete, %d not complete",
             action_name,
             complete,

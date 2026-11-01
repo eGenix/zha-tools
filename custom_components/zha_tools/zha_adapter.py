@@ -39,12 +39,15 @@ class DeviceUnreachableError(Exception):
     """
 
 
-def async_get_zha_device(hass: HomeAssistant, device_id: str) -> object:
+def async_get_zha_device(
+    hass: HomeAssistant, device_id: str, quiet: bool = False
+) -> object:
     """Return the ZHA device object for a Home Assistant ``device_id``.
 
     Args:
         hass: The Home Assistant instance.
         device_id: A device registry id which must belong to a ZHA device.
+        quiet: Do not log the lookup (for actions which must not log).
 
     Returns:
         The underlying ZHA device object. It exposes at least an ``available``
@@ -63,6 +66,8 @@ def async_get_zha_device(hass: HomeAssistant, device_id: str) -> object:
         raise ServiceValidationError(
             f"Device {device_id!r} is not a known {DOMAIN} target ZHA device"
         ) from err
+    if quiet:
+        return proxy.device
     _LOGGER.debug(
         "Resolved device %s to ZHA device %s (available=%s)",
         device_id,
@@ -92,11 +97,12 @@ def selected_device_ids(device_proxies: list) -> list[str]:
     return [proxy.device_id for proxy in proxies]
 
 
-def async_get_zha_device_ids(hass: HomeAssistant) -> list[str]:
+def async_get_zha_device_ids(hass: HomeAssistant, quiet: bool = False) -> list[str]:
     """Return the device ids of all ZHA devices except the coordinator.
 
     Args:
         hass: The Home Assistant instance.
+        quiet: Do not log the lookup (for actions which must not log).
 
     Returns:
         The device registry ids of every device managed by ZHA, minus the
@@ -116,6 +122,8 @@ def async_get_zha_device_ids(hass: HomeAssistant) -> list[str]:
         ) from err
 
     device_ids = selected_device_ids(list(gateway_proxy.device_proxies.values()))
+    if quiet:
+        return device_ids
     _LOGGER.debug(
         "Found %d ZHA device(s) excluding the coordinator: %s",
         len(device_ids),

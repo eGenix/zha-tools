@@ -190,7 +190,8 @@ async def test_query_action_all_devices_runs_a_batch(hass, service, action):
     args = mock.await_args.args
     assert args[1] is getattr(zha_tools, action)
     assert args[2] == service
-    assert mock.await_args.kwargs == {}
+    # No retry parameters; frame counter runs must not log anything.
+    assert mock.await_args.kwargs == {"quiet": service == SERVICE_FRAME_COUNTER}
 
 
 @pytest.mark.parametrize(

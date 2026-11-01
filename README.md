@@ -169,7 +169,7 @@ Home Assistant leaves the name of the response variable to the caller; an action
     response_variable: zha_response
 ```
 
-The response is optional (`SupportsResponse.OPTIONAL`): without `response_variable` the action still runs, and its outcome only shows up in the log. From **Developer Tools -> Actions**, enable the **Return response** toggle to see the result. See [Response](#response) above for the keys returned in `zha_response`. The same applies to the `reinterview`, `ping`, `frame_counter`, `query_route`, `retry_action` and `rejoin` actions below.
+The response is optional (`SupportsResponse.OPTIONAL`): without `response_variable` the action still runs, and its outcome only shows up in the log. From **Developer Tools -> Actions**, enable the **Return response** toggle to see the result. See [Response](#response) above for the keys returned in `zha_response`. The same applies to the `reinterview`, `ping`, `frame_counter`, `query_route`, `retry_action` and `rejoin` actions below — except that `frame_counter` writes nothing to the log at all, so without a response its result is lost.
 
 ## Re-interview
 
@@ -280,7 +280,7 @@ The response is a mapping with:
 - `frame_counter` (integer or `null`) — the highest frame counter the coordinator has accepted from the device; `null` for `not_neighbor`.
 - `last_seen` (string or `null`) — when the coordinator last heard from the device, as an ISO 8601 UTC timestamp.
 
-Each counter read is also noted in the Home Assistant log: at info level normally, as a **warning** if the counter is higher than 100, and as an **error** if it is higher than 1000. The counter value itself is only returned in the response; it is not written to the log.
+Frame counter reads are **never logged** — neither the counter values nor the fact that a read took place, also not in all-devices runs or at debug level. The results are only returned in the response, so capture it with `response_variable`. Errors are not silenced: a single read raises them, and an all-devices run returns them as that device's result (`status: error`).
 
 An unexpected error, such as an unsupported radio, is **not** swallowed: it propagates to the caller rather than being reported as a status. In an [all-devices](#running-on-all-devices) run, `not_neighbor` devices count as `failed`; filter on `status == 'complete'` to get the neighbors.
 

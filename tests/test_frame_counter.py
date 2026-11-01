@@ -17,8 +17,16 @@ import pytest
 
 from homeassistant.exceptions import HomeAssistantError
 
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
 from custom_components.zha_tools import zha_adapter
-from custom_components.zha_tools.const import STATUS_COMPLETE, STATUS_NOT_NEIGHBOR
+from custom_components.zha_tools.const import (
+    DOMAIN,
+    SERVICE_FRAME_COUNTER,
+    STATUS_COMPLETE,
+    STATUS_ERROR,
+    STATUS_NOT_NEIGHBOR,
+)
 from custom_components.zha_tools.frame_counter import async_read_frame_counter
 
 IEEE = "00:11:22:33:44:55:66:77"
@@ -88,28 +96,73 @@ async def test_not_neighbor_when_no_counter_is_stored(hass):
     }
 
 
-@pytest.mark.parametrize(
-    ("frame_counter", "level"),
-    [
-        (0, logging.INFO),
-        (100, logging.INFO),
-        (101, logging.WARNING),
-        (1000, logging.WARNING),
-        (1001, logging.ERROR),
-    ],
-)
-async def test_log_level_depends_on_counter(hass, caplog, frame_counter, level):
+def _integration_records(caplog):
+    """Return the log records written by this integration."""
+    prefix = "custom_components.zha_tools"
+    return [r for r in caplog.records if r.name.startswith(prefix)]
+
+
+@pytest.mark.parametrize("frame_counter", [None, 0, 101, 5_000_000])
+async def test_read_logs_nothing(hass, caplog, frame_counter):
+    """Frame counter reads must not show up in the log at all."""
     device = SimpleNamespace(ieee=IEEE, last_seen=None)
     read = AsyncMock(return_value=frame_counter)
 
-    with caplog.at_level(logging.INFO):
+    with caplog.at_level(logging.DEBUG):
         await _run(hass, device, read)
 
-    records = [r for r in caplog.records if "frame counter" in r.getMessage()]
-    assert len(records) == 1
-    assert records[0].levelno == level
-    # The counter value itself is never logged.
-    assert frame_counter not in records[0].args
+    assert _integration_records(caplog) == []
+
+
+async def test_service_calls_log_nothing(hass, caplog):
+    """Neither single reads nor all-devices runs log anything, errors included."""
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=DOMAIN)
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    devices = {
+        "dev1": SimpleNamespace(ieee=IEEE, last_seen=None),
+        "dev2": SimpleNamespace(ieee=IEEE, last_seen=None),
+    }
+    read = AsyncMock(side_effect=[4711, HomeAssistantError("radio gone"), 42])
+    caplog.clear()
+    with (
+        patch(
+            "custom_components.zha_tools.frame_counter.async_get_zha_device",
+            side_effect=lambda hass_, device_id, quiet=False: devices[device_id],
+        ),
+        patch(
+            "custom_components.zha_tools.frame_counter."
+            "async_get_neighbor_frame_counter",
+            new=read,
+        ),
+        patch(
+            "custom_components.zha_tools.batch.async_get_zha_device_ids",
+            return_value=["dev1", "dev2"],
+        ),
+        caplog.at_level(logging.DEBUG),
+    ):
+        single = await hass.services.async_call(
+            DOMAIN,
+            SERVICE_FRAME_COUNTER,
+            {"device_id": "dev1"},
+            blocking=True,
+            return_response=True,
+        )
+        batch = await hass.services.async_call(
+            DOMAIN,
+            SERVICE_FRAME_COUNTER,
+            {"all_devices": True},
+            blocking=True,
+            return_response=True,
+        )
+
+    assert single["frame_counter"] == 4711
+    # The error is not silenced: it is returned in the device's result.
+    assert [d["status"] for d in batch["devices"]] == [STATUS_ERROR, STATUS_COMPLETE]
+    assert batch["devices"][0]["error"] == "radio gone"
+    assert _integration_records(caplog) == []
 
 
 async def test_errors_propagate(hass):

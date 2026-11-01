@@ -251,6 +251,7 @@ async def _async_handle_query_action(
     call: ServiceCall,
     service: str,
     action: DeviceAction,
+    quiet: bool = False,
 ) -> ServiceResponse:
     """Run a non-retried, read-only action for a service call.
 
@@ -264,6 +265,8 @@ async def _async_handle_query_action(
         service: The service name, used in log and error messages.
         action: The single-device coroutine function to run, called as
             ``action(hass, device_id)``.
+        quiet: Log nothing at all, for actions whose use must not show up in
+            the log (frame counter).
 
     Returns:
         The single-device result, or the batch result for an all-devices run.
@@ -274,14 +277,15 @@ async def _async_handle_query_action(
     """
     all_devices = call.data.get(CONF_ALL_DEVICES, False)
     device_id = call.data.get(ATTR_DEVICE_ID)
-    _LOGGER.debug(
-        "Service %s.%s called for %s",
-        DOMAIN,
-        service,
-        "all devices" if all_devices else f"device {device_id}",
-    )
+    if not quiet:
+        _LOGGER.debug(
+            "Service %s.%s called for %s",
+            DOMAIN,
+            service,
+            "all devices" if all_devices else f"device {device_id}",
+        )
     if all_devices:
-        result = await async_run_on_all_devices(hass, action, service)
+        result = await async_run_on_all_devices(hass, action, service, quiet=quiet)
     elif device_id:
         result = await action(hass, device_id)
     else:
@@ -289,14 +293,14 @@ async def _async_handle_query_action(
             f"{DOMAIN}.{service} needs either a device_id or all_devices set "
             f"to true"
         )
-    # Only the status is logged: the result may hold values which must not end
-    # up in the log, such as frame counters. The actions log their own results.
-    _LOGGER.debug(
-        "Service %s.%s returning status %s",
-        DOMAIN,
-        service,
-        result.get("status", f"{result.get('complete')}/{result.get('total')}"),
-    )
+    if not quiet:
+        # Only the status is logged; the actions log their own results.
+        _LOGGER.debug(
+            "Service %s.%s returning status %s",
+            DOMAIN,
+            service,
+            result.get("status", f"{result.get('complete')}/{result.get('total')}"),
+        )
     return result
 
 
@@ -339,7 +343,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async def handle_frame_counter(call: ServiceCall) -> ServiceResponse:
         """Handle a frame counter call and return the counter(s) read."""
         return await _async_handle_query_action(
-            hass, call, SERVICE_FRAME_COUNTER, async_read_frame_counter
+            hass, call, SERVICE_FRAME_COUNTER, async_read_frame_counter, quiet=True
         )
 
     async def handle_query_route(call: ServiceCall) -> ServiceResponse:
