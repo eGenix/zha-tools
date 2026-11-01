@@ -22,7 +22,11 @@ from homeassistant.helpers import device_registry as dr
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.zha_tools import zha_adapter
-from custom_components.zha_tools.const import DOMAIN, STATUS_COMPLETE, STATUS_NO_ROUTE
+from custom_components.zha_tools.const import (
+    STATUS_COMPLETE,
+    STATUS_NO_ROUTE,
+    ZHA_DOMAIN,
+)
 from custom_components.zha_tools.route import (
     MAX_HOPS,
     async_query_route,
@@ -43,7 +47,7 @@ DEVICES = {
 
 def _register(hass, ieee, name):
     """Register a ZHA-style device (with a zigbee connection) by name."""
-    entry = MockConfigEntry(domain=DOMAIN)
+    entry = MockConfigEntry(domain=ZHA_DOMAIN)
     entry.add_to_hass(hass)
     return (
         dr.async_get(hass)

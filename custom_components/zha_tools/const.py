@@ -68,6 +68,7 @@ DATA_RECONFIGURE_LOCK = "reconfigure_lock"
 # duplicated here on purpose so importing this module does not pull in the heavy
 # ZHA / zigpy dependency tree (the real values are forwarded on the Home
 # Assistant dispatcher by ZHA's device proxy). Keep in sync with ZHA.
+ZHA_DOMAIN = "zha"
 SIGNAL_DEVICE_RECONFIGURE_EVENT = "zha_device_reconfigure_event"
 ZHA_EVENT_TYPE = "type"
 ZHA_EVENT_BIND = "zha_channel_bind"

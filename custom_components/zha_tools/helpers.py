@@ -7,6 +7,8 @@ from datetime import UTC, datetime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 
+from .const import ZHA_DOMAIN
+
 
 def _display_name(device: dr.DeviceEntry | None) -> str | None:
     """Return the display name of a device registry entry, or ``None``.
@@ -36,20 +38,25 @@ def device_name_by_ieee(hass: HomeAssistant, ieee: str) -> str | None:
     """Return the display name of a Zigbee device, looked up by IEEE address.
 
     ZHA registers each of its devices, including the coordinator, with a
-    ``zigbee`` connection carrying the device's IEEE address.
+    ``zigbee`` connection carrying the device's IEEE address. Connections are
+    not unique across config entries, so only devices of ZHA's config entries
+    are considered.
 
     Args:
         hass: The Home Assistant instance.
         ieee: The device's IEEE address, as a ``xx:xx:...`` string.
 
     Returns:
-        The device's display name, or ``None`` if Home Assistant does not know
-        the device or it has no name.
+        The device's display name, or ``None`` if ZHA has not registered the
+        device or it has no name.
     """
-    device = dr.async_get(hass).async_get_device(
-        connections={(dr.CONNECTION_ZIGBEE, ieee)}
-    )
-    return _display_name(device)
+    registry = dr.async_get(hass)
+    connection = (dr.CONNECTION_ZIGBEE, ieee)
+    for entry in hass.config_entries.async_entries(ZHA_DOMAIN):
+        for device in dr.async_entries_for_config_entry(registry, entry.entry_id):
+            if connection in device.connections:
+                return _display_name(device)
+    return None
 
 
 def device_label(hass: HomeAssistant, device_id: str) -> str:

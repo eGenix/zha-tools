@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Looking up device names by IEEE address (used by `zha_tools.query_route`) no longer calls Home Assistant's deprecated `device_registry.async_get_device`, which logged a deprecation warning and will stop working in Home Assistant 2027.8.0. Only devices registered by ZHA are considered now, since other integrations may register the same Zigbee connection.
+
 ## [0.6.1] - 2026-11-01
 
 ### Changed
