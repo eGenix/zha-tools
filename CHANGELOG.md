@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `zha_tools.retry_action` accepts an optional `metadata` field and passes it on to the wrapped action inside its data, as the `metadata` entry, the same way `data` is passed on. Entity actions ignore it; actions with a strict schema reject the call as invalid. Giving `metadata` both on its own and in `data` is refused as an invalid call. Like `data`, its values are never logged.
+
 ### Fixed
 
 - Looking up device names by IEEE address (used by `zha_tools.query_route`) no longer calls Home Assistant's deprecated `device_registry.async_get_device`, which logged a deprecation warning and will stop working in Home Assistant 2027.8.0. Only devices registered by ZHA are considered now, since other integrations may register the same Zigbee connection.

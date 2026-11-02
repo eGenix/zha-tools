@@ -405,6 +405,7 @@ Only failures a retry can fix are retried: errors raised by the action, attempts
 | `action` | yes | — | The action to call, e.g. `cover.close_cover`. |
 | `target` | no | — | The target of the action (`entity_id`, `device_id`, `area_id`, ...), as for a regular action call. |
 | `data` | no | — | The data for the action, as for a regular action call. |
+| `metadata` | no | — | Passed on to the action inside its `data`, as the `metadata` entry (only if given, also if empty). Entity actions ignore it; actions with a strict schema (e.g. `notify` or `script` actions) reject the call as invalid. Giving `metadata` both here and in `data` is an invalid call. |
 | `timeout` | no | `600` | Overall time limit in seconds, for all attempts and the waits between them (1 to 86400). |
 | `attempt_timeout` | no | `30` | Time limit in seconds for a single attempt (1 to 600). |
 | `retry_delay` | no | `5` | Seconds to wait after the first failed attempt (1 to 3600). |
@@ -424,7 +425,7 @@ The response is a mapping with:
 - `elapsed` (number) — seconds from the first attempt to the end.
 - `error` (string or `null`) — the error of the last failed attempt, `null` on success.
 
-Each failed attempt is logged at info level; giving up is logged as a warning. The wrapped action's `data` is never written to the log (it may hold codes or other secrets); debug logging only shows its keys.
+Each failed attempt is logged at info level; giving up is logged as a warning. The wrapped action's `data` and `metadata` are never written to the log (they may hold codes or other secrets); debug logging only shows their keys.
 
 ### Example: replacing a regular action call
 
@@ -471,6 +472,40 @@ The same works for any other action, here with tuned timing and a check of the o
           Could not close {{ zha_response.device_name }} after
           {{ zha_response.attempts }} attempts: {{ zha_response.error }}
 ```
+
+### Example: wrapping an action step with `metadata`
+
+Action steps created in the UI often carry a `metadata` entry:
+
+```yaml
+- action: climate.set_temperature
+  metadata: {}
+  target:
+    entity_id: climate.bedroom_valve
+  data:
+    temperature: 21
+```
+
+To wrap such a step, move `metadata` under the wrapper's `data`, next to the wrapped action's `target` and `data`:
+
+```yaml
+- action: zha_tools.retry_action
+  data:
+    action: climate.set_temperature
+    target:
+      entity_id: climate.bedroom_valve
+    data:
+      temperature: 21
+    metadata: {}
+```
+
+Each attempt then calls `climate.set_temperature` with the data `{"temperature": 21, "metadata": {}}`. As for any entity action, Home Assistant drops the `metadata` entry, so the valve gets the same command as from the regular step.
+
+A few things to keep in mind:
+
+- Actions with a strict schema don't accept a `metadata` entry. For example, wrapping `persistent_notification.create` with `metadata` fails right away with `extra keys not allowed @ data['metadata']`. Leave `metadata` out for such actions.
+- Give `metadata` only once: next to `data`, or inside it, not both. Giving it twice is refused as an invalid call.
+- When you build the step in the UI, the editor may add its own `metadata: {}` next to `action: zha_tools.retry_action`. Home Assistant drops that one before calling the wrapper; only the `metadata` under the wrapper's `data` is passed on.
 
 > [!NOTE]
 > The wrapper waits until the command goes through, so the automation or script stays at this step meanwhile — up to `timeout` seconds. Keep that in mind for the automation's `mode`: with the default `single`, a new trigger is ignored while the wrapper is still retrying. Use `mode: restart` if a newer command should replace the pending one, or run the step in a `parallel` block if the rest of the automation shouldn't wait.

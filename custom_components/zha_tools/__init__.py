@@ -46,6 +46,7 @@ from .const import (
     CONF_BACKOFF,
     CONF_CONFIRM,
     CONF_DATA,
+    CONF_METADATA,
     CONF_MAX_DELAY,
     CONF_MAX_RETRIES,
     CONF_REJOIN_WAIT,
@@ -139,6 +140,8 @@ RETRY_ACTION_SCHEMA = vol.Schema(
         vol.Required(CONF_ACTION): cv.service,
         vol.Optional(CONF_DATA, default=dict): dict,
         vol.Optional(CONF_TARGET, default=dict): vol.Schema(cv.TARGET_SERVICE_FIELDS),
+        # Passed on inside the wrapped action's data, only when given.
+        vol.Optional(CONF_METADATA): dict,
         # All timing values are bounded (which also rejects "inf"), so a call
         # cannot keep retrying forever or flood the network with attempts.
         vol.Optional(CONF_TIMEOUT, default=DEFAULT_RETRY_ACTION_TIMEOUT): vol.All(
@@ -350,16 +353,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     async def handle_retry_action(call: ServiceCall) -> ServiceResponse:
         """Handle a reliable action call and return its outcome."""
-        # The wrapped action's data may hold secrets (e.g. lock codes), so
-        # only its keys are logged.
+        # The wrapped action's data and metadata may hold secrets (e.g. lock
+        # codes), so only their keys are logged.
+        metadata = call.data.get(CONF_METADATA)
         _LOGGER.debug(
-            "Service %s.%s called for %s (target=%s, data keys=%s, timeout=%s, "
-            "attempt_timeout=%s, retry_delay=%s, backoff=%s, max_delay=%s)",
+            "Service %s.%s called for %s (target=%s, data keys=%s, "
+            "metadata keys=%s, timeout=%s, attempt_timeout=%s, retry_delay=%s, "
+            "backoff=%s, max_delay=%s)",
             DOMAIN,
             SERVICE_RETRY_ACTION,
             call.data[CONF_ACTION],
             call.data[CONF_TARGET],
             sorted(call.data[CONF_DATA]),
+            None if metadata is None else sorted(metadata),
             call.data[CONF_TIMEOUT],
             call.data[CONF_ATTEMPT_TIMEOUT],
             call.data[CONF_RETRY_DELAY],
@@ -377,6 +383,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             backoff=call.data[CONF_BACKOFF],
             max_delay=call.data[CONF_MAX_DELAY],
             context=call.context,
+            metadata=metadata,
         )
         _LOGGER.debug(
             "Service %s.%s returning %s", DOMAIN, SERVICE_RETRY_ACTION, result

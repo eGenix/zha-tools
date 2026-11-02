@@ -313,6 +313,15 @@ retry_action:
       example: '{"temperature": 21}'
       selector:
         object:
+    metadata:
+      name: Metadata
+      description: >-
+        Passed on to the action inside its data, as the "metadata" entry.
+        Entity actions ignore it; actions with a strict schema reject the call.
+      required: false
+      example: '{}'
+      selector:
+        object:
     timeout:
       name: Timeout
       description: >-

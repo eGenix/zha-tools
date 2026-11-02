@@ -55,7 +55,13 @@ from homeassistant.exceptions import (
 )
 from homeassistant.helpers import config_validation as cv, entity_registry as er
 
-from .const import DOMAIN, SERVICE_RETRY_ACTION, STATUS_COMPLETE, STATUS_TIMEOUT
+from .const import (
+    CONF_METADATA,
+    DOMAIN,
+    SERVICE_RETRY_ACTION,
+    STATUS_COMPLETE,
+    STATUS_TIMEOUT,
+)
 from .helpers import device_name
 
 _LOGGER = logging.getLogger(__name__)
@@ -209,6 +215,7 @@ async def async_retry_action(
     backoff: float,
     max_delay: float,
     context: Context | None = None,
+    metadata: dict | None = None,
 ) -> dict:
     """Call an action until it succeeds or the overall timeout runs out.
 
@@ -228,6 +235,9 @@ async def async_retry_action(
         max_delay: Upper limit for the delay between attempts, in seconds.
         context: The context of the calling action, so the wrapped calls run
             with the caller's permissions and are attributed to it.
+        metadata: If given (also if empty), passed on to the action as the
+            ``metadata`` entry of its data. Entity actions drop it; actions
+            with a strict schema reject it as invalid data.
 
     Returns:
         A mapping with the ``action``, the targeted ``device_name`` (names of
@@ -238,7 +248,8 @@ async def async_retry_action(
 
     Raises:
         ServiceValidationError: If the call is invalid (e.g. unknown action or
-            entity, or a ZHA Tools action), which no retry can fix.
+            entity, a ZHA Tools action, or ``metadata`` given both on its own
+            and in ``data``), which no retry can fix.
         vol.Invalid: If the data does not match the action's schema.
         Unauthorized: If the caller may not run the action.
     """
@@ -251,6 +262,13 @@ async def async_retry_action(
             f"{DOMAIN}.{SERVICE_RETRY_ACTION} cannot wrap {DOMAIN} actions; "
             f"use their own retry options instead"
         )
+    if metadata is not None:
+        if CONF_METADATA in data:
+            raise ServiceValidationError(
+                f"{DOMAIN}.{SERVICE_RETRY_ACTION} got {CONF_METADATA} both on its "
+                f"own and in data; give it only once"
+            )
+        data = {**data, CONF_METADATA: metadata}
     name = target_device_names(hass, data, target)
     entity_ids = targeted_entity_ids(hass, domain, data, target)
     label = f"{action} on {name}" if name else action

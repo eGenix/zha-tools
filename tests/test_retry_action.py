@@ -212,6 +212,71 @@ async def test_service_call_uses_defaults(hass, clock):
     assert calls[-1].data == {"position": 10}
 
 
+async def test_metadata_is_passed_in_the_action_data(hass, clock):
+    calls = _register_flaky(hass, failures=1)
+
+    await async_retry_action(
+        hass,
+        "test.flaky",
+        {"position": 10},
+        {},
+        **PARAMS,
+        metadata={"source": "ui"},
+    )
+
+    assert len(calls) == 2
+    assert all(
+        call.data == {"position": 10, "metadata": {"source": "ui"}} for call in calls
+    )
+
+
+async def test_empty_metadata_is_passed_too(hass, clock):
+    calls = _register_flaky(hass, failures=0)
+
+    await async_retry_action(hass, "test.flaky", {}, {}, **PARAMS, metadata={})
+
+    assert calls[0].data == {"metadata": {}}
+
+
+async def test_metadata_conflicting_with_data_is_refused(hass, clock):
+    calls = _register_flaky(hass, failures=0)
+
+    with pytest.raises(ServiceValidationError):
+        await async_retry_action(
+            hass,
+            "test.flaky",
+            {"metadata": {"a": 1}},
+            {},
+            **PARAMS,
+            metadata={"b": 2},
+        )
+
+    assert calls == []
+
+
+async def test_service_call_passes_metadata(hass, clock):
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=DOMAIN)
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    calls = _register_flaky(hass, failures=0)
+
+    result = await hass.services.async_call(
+        DOMAIN,
+        SERVICE_RETRY_ACTION,
+        {
+            "action": "test.flaky",
+            "data": {"position": 10},
+            "metadata": {"source": "ui"},
+        },
+        blocking=True,
+        return_response=True,
+    )
+
+    assert result["status"] == STATUS_COMPLETE
+    assert calls[0].data == {"position": 10, "metadata": {"source": "ui"}}
+
+
 async def test_service_call_rejects_bad_action_name(hass):
     entry = MockConfigEntry(domain=DOMAIN, unique_id=DOMAIN)
     entry.add_to_hass(hass)
@@ -354,8 +419,16 @@ async def test_caller_context_is_passed_on(hass, clock):
         {"action": "test.flaky", "retry_delay": 0.1},
         {"action": "test.flaky", "target": {"entity_id": "not an entity"}},
         {"action": "test.flaky", "target": {"bogus": "x"}},
+        {"action": "test.flaky", "metadata": "not a mapping"},
     ],
-    ids=["inf", "too-long", "too-fast", "bad-entity", "unknown-target-key"],
+    ids=[
+        "inf",
+        "too-long",
+        "too-fast",
+        "bad-entity",
+        "unknown-target-key",
+        "bad-metadata",
+    ],
 )
 async def test_service_call_rejects_unbounded_or_bad_values(hass, data):
     entry = MockConfigEntry(domain=DOMAIN, unique_id=DOMAIN)
@@ -380,9 +453,14 @@ async def test_debug_log_does_not_contain_action_data(hass, clock, caplog):
         await hass.services.async_call(
             DOMAIN,
             SERVICE_RETRY_ACTION,
-            {"action": "test.flaky", "data": {"code": "s3cret"}},
+            {
+                "action": "test.flaky",
+                "data": {"code": "s3cret"},
+                "metadata": {"note": "hidden"},
+            },
             blocking=True,
             return_response=True,
         )
 
     assert "s3cret" not in caplog.text
+    assert "hidden" not in caplog.text
