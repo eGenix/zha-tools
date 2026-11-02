@@ -81,7 +81,7 @@ from .route import async_query_route
 
 _LOGGER = logging.getLogger(__name__)
 
-__version__ = "0.6.1"
+__version__ = "0.7.0"
 
 # The reconfigure, re-interview and ping actions share the same retry parameters;
 # per-call overrides are optional and fall back to the config entry options.
